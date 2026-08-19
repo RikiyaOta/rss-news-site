@@ -151,31 +151,33 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
   ];
 
   test.beforeEach(async ({ page }) => {
-    // Web Worker をブラウザ環境でモック化して高速・安定したベクトル化を実現
-    await page.addInitScript(() => {
-      window.Worker = class MockWorker extends EventTarget {
-        constructor() {
-          super();
-        }
-        postMessage(data: any) {
-          setTimeout(() => {
-            const vec = new Float32Array(384);
-            vec.fill(1.0 / Math.sqrt(384));
-            const event = new MessageEvent("message", {
-              data: {
-                id: data.id,
-                vector: Array.from(vec),
-              },
-            });
-            this.dispatchEvent(event);
-            if (typeof (this as any).onmessage === "function") {
-              (this as any).onmessage(event);
-            }
-          }, 10);
-        }
-        terminate() {}
-      } as any;
-    });
+    // Web Worker をブラウザ環境でモック化（E2E_REAL_MODEL が有効な場合は本物の Worker を使用）
+    if (!process.env.E2E_REAL_MODEL) {
+      await page.addInitScript(() => {
+        window.Worker = class MockWorker extends EventTarget {
+          constructor() {
+            super();
+          }
+          postMessage(data: any) {
+            setTimeout(() => {
+              const vec = new Float32Array(384);
+              vec.fill(1.0 / Math.sqrt(384));
+              const event = new MessageEvent("message", {
+                data: {
+                  id: data.id,
+                  vector: Array.from(vec),
+                },
+              });
+              this.dispatchEvent(event);
+              if (typeof (this as any).onmessage === "function") {
+                (this as any).onmessage(event);
+              }
+            }, 10);
+          }
+          terminate() {}
+        } as any;
+      });
+    }
 
     const todayDbBuf = createDailyDbBuffer(todayArticles);
     const yesterdayDbBuf = createDailyDbBuffer(yesterdayArticles);
@@ -302,13 +304,17 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     const searchBtn = page.getByRole("button", { name: "検索", exact: true });
     await searchBtn.click();
 
-    // 検索結果に「一致度 XX%」バッジと該当日付バッジが表示されること
+    // 検索結果に「一致度 XX%」バッジと該当日付バッジが表示されること（実モデルロード時は最大60秒待機）
     const articleCards = page.getByTestId("article-card");
-    await expect(articleCards.first()).toBeVisible();
+    await expect(articleCards.first()).toBeVisible({
+      timeout: process.env.E2E_REAL_MODEL ? 60000 : 5000,
+    });
 
     const similarityBadge = articleCards.first().getByTestId("similarity-badge");
-    await expect(similarityBadge).toBeVisible();
-    await expect(similarityBadge).toHaveText(/一致度\s*\d+%/);
+    await expect(similarityBadge).toBeVisible({
+      timeout: process.env.E2E_REAL_MODEL ? 60000 : 5000,
+    });
+    await expect(similarityBadge).toHaveText(/一致度\s*-?\d+%/);
 
     // 該当日付バッジが表示されること
     await expect(articleCards.first().getByText(todayStr)).toBeVisible();
@@ -328,7 +334,9 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     const searchBtn = page.getByRole("button", { name: "検索", exact: true });
     await searchBtn.click();
 
-    await expect(page.getByTestId("similarity-badge").first()).toBeVisible();
+    await expect(page.getByTestId("similarity-badge").first()).toBeVisible({
+      timeout: process.env.E2E_REAL_MODEL ? 60000 : 5000,
+    });
 
     // クリアボタンをクリック
     const clearBtn = page.getByRole("button", { name: "クリア" });

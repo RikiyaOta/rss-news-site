@@ -18,14 +18,14 @@ export function formatQueryText(query: string): string {
  */
 export async function getWorkerExtractor(customPipeline?: any): Promise<any> {
   if (customPipeline) {
-    extractor = await customPipeline("feature-extraction", "intfloat/multilingual-e5-small", {
+    extractor = await customPipeline("feature-extraction", "Xenova/multilingual-e5-small", {
       dtype: "q8",
     });
     return extractor;
   }
 
   if (!extractor) {
-    extractor = await pipeline("feature-extraction", "intfloat/multilingual-e5-small", {
+    extractor = await pipeline("feature-extraction", "Xenova/multilingual-e5-small", {
       dtype: "q8",
     });
   }

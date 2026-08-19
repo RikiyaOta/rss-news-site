@@ -199,11 +199,12 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       expect(schedule[0].cron).toBe("0 0 * * *");
     });
 
-    it("Playwright ブラウザのインストールおよび pnpm test:e2e の実行が含まれていること", () => {
+    it("Playwright ブラウザのインストール、E2E_REAL_MODEL 環境変数、および pnpm test:e2e の実行が含まれていること", () => {
       const filePath = path.join(workflowsDir, "e2e.yml");
       const content = fs.readFileSync(filePath, "utf-8");
 
       expect(content).toMatch(/playwright\s+install/);
+      expect(content).toContain("E2E_REAL_MODEL");
       expect(content).toContain("pnpm test:e2e");
     });
   });
