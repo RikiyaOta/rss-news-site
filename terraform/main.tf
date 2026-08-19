@@ -3,7 +3,7 @@ terraform {
   required_providers {
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = "~> 4.0"
+      version = "~> 5.0"
     }
   }
 }
@@ -47,20 +47,26 @@ resource "cloudflare_pages_project" "site" {
   name              = var.pages_project_name
   production_branch = var.production_branch
 
-  build_config {
+  build_config = {
     build_command   = "pnpm build"
     destination_dir = "dist"
   }
 
-  deployment_configs {
-    production {
-      environment_variables = {
-        NODE_VERSION = "24"
+  deployment_configs = {
+    production = {
+      env_vars = {
+        NODE_VERSION = {
+          type  = "plain_text"
+          value = "24"
+        }
       }
     }
-    preview {
-      environment_variables = {
-        NODE_VERSION = "24"
+    preview = {
+      env_vars = {
+        NODE_VERSION = {
+          type  = "plain_text"
+          value = "24"
+        }
       }
     }
   }
@@ -69,5 +75,5 @@ resource "cloudflare_pages_project" "site" {
 resource "cloudflare_pages_domain" "custom" {
   account_id   = var.cloudflare_account_id
   project_name = cloudflare_pages_project.site.name
-  domain       = var.custom_domain
+  name         = var.custom_domain
 }

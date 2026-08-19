@@ -39,7 +39,7 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       const content = fs.readFileSync(mainPath, "utf-8");
 
       expect(content).toMatch(/source\s*=\s*"cloudflare\/cloudflare"/);
-      expect(content).toMatch(/version\s*=\s*"(~>|>=|>|=)?\s*4\./);
+      expect(content).toMatch(/version\s*=\s*"(~>|>=|>|=)?\s*5\./);
       expect(content).toMatch(/provider\s+"cloudflare"/);
     });
 
@@ -91,7 +91,7 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       expect(content).toMatch(/resource\s+"cloudflare_pages_domain"\s+"custom"/);
       expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
       expect(content).toMatch(/project_name\s*=\s*cloudflare_pages_project\.site\.name/);
-      expect(content).toMatch(/domain\s*=\s*var\.custom_domain/);
+      expect(content).toMatch(/name\s*=\s*var\.custom_domain/);
     });
   });
 
@@ -185,7 +185,7 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       const content = fs.readFileSync(outputsPath, "utf-8");
 
       expect(content).toMatch(/output\s+"custom_domain"/);
-      expect(content).toMatch(/value\s*=\s*cloudflare_pages_domain\.custom\.domain/);
+      expect(content).toMatch(/value\s*=\s*cloudflare_pages_domain\.custom\.name/);
     });
 
     it("r2_public_url 出力が定義されていること", () => {

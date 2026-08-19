@@ -102,7 +102,6 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       expect(content).toContain("pnpm test:coverage");
       expect(content).toContain("GITHUB_STEP_SUMMARY");
     });
-
     it("CI ワークフローに pinact によるアクション検証ステップが含まれていること", () => {
       const filePath = path.join(workflowsDir, "ci.yml");
       const content = fs.readFileSync(filePath, "utf-8");
@@ -118,6 +117,14 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
 
       expect(pkg.scripts["pinact:check"]).toBeDefined();
       expect(pkg.scripts["pinact:check"]).toContain("pinact run --check --verify");
+    });
+
+    it("Terraform 初期化および構文検証 (terraform validate) が含まれていること", () => {
+      const filePath = path.join(workflowsDir, "ci.yml");
+      const content = fs.readFileSync(filePath, "utf-8");
+
+      expect(content).toContain("terraform init -backend=false");
+      expect(content).toContain("terraform validate");
     });
   });
 

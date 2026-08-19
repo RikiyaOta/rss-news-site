@@ -51,6 +51,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm pinact:check
 
+      - name: Terraform 初期化 & 構文検証 (terraform validate)
+        working-directory: terraform
+        run: |
+          terraform init -backend=false
+          terraform validate
       - name: テスト実行とカバレッジ計測
         run: |
           pnpm test:coverage > coverage_raw.txt 2>&1
