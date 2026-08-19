@@ -17,3 +17,8 @@ output "custom_domain" {
   description = "Cloudflare Pages custom domain"
   value       = cloudflare_pages_domain.custom.domain
 }
+
+output "r2_public_url" {
+  description = "Public URL for the R2 data bucket"
+  value       = "https://${cloudflare_r2_managed_domain.data.domain}"
+}

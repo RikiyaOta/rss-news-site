@@ -254,6 +254,20 @@ describe("Wasm SQLite クライアント & 差分DB結合 (sqlite-client)", () =
     ).rejects.toThrow("DBのダウンロードに失敗しました: 500 Internal Server Error");
   });
 
+  it("loadDatabaseFromUrl: HTML 等の不正なDBレスポンスの場合はエラーを投げること", async () => {
+    const htmlFetch = vi.fn(
+      async () =>
+        new Response("<!doctype html><html><body>Error 404</body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        }),
+    ) as unknown as typeof fetch;
+
+    await expect(
+      loadDatabaseFromUrl("https://r2.example.com/data/html.db", htmlFetch, SQL),
+    ).rejects.toThrow("不正なDB形式またはHTMLエラーレスポンスです");
+  });
+
   it("clearDatabaseCache: キャッシュをクリアすると次回再fetchが行われること", async () => {
     const mockFetch = createMockFetch();
     const url = "https://r2.example.com/data/2026-08-19.db";

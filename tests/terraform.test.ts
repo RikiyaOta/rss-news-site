@@ -53,6 +53,26 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       expect(content).toMatch(/location\s*=\s*"(apac|APAC|auto)"/i);
     });
 
+    it("Cloudflare R2 パブリックマネージドドメイン (cloudflare_r2_managed_domain.data) が正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/resource\s+"cloudflare_r2_managed_domain"\s+"data"/);
+      expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
+      expect(content).toMatch(/bucket_name\s*=\s*cloudflare_r2_bucket\.data\.name/);
+      expect(content).toMatch(/enabled\s*=\s*true/);
+    });
+
+    it("Cloudflare R2 CORS 設定 (cloudflare_r2_bucket_cors.data) が正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/resource\s+"cloudflare_r2_bucket_cors"\s+"data"/);
+      expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
+      expect(content).toMatch(/bucket_name\s*=\s*cloudflare_r2_bucket\.data\.name/);
+      expect(content).toMatch(/methods\s*=\s*\["GET",\s*"HEAD"\]/);
+    });
+
     it("Cloudflare Pages プロジェクトリソース (cloudflare_pages_project.site) が正しく定義されていること", () => {
       const mainPath = path.join(tfDir, "main.tf");
       const content = fs.readFileSync(mainPath, "utf-8");
@@ -166,6 +186,16 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
 
       expect(content).toMatch(/output\s+"custom_domain"/);
       expect(content).toMatch(/value\s*=\s*cloudflare_pages_domain\.custom\.domain/);
+    });
+
+    it("r2_public_url 出力が定義されていること", () => {
+      const outputsPath = path.join(tfDir, "outputs.tf");
+      const content = fs.readFileSync(outputsPath, "utf-8");
+
+      expect(content).toMatch(/output\s+"r2_public_url"/);
+      expect(content).toMatch(
+        /value\s*=\s*"https:\/\/\$\{cloudflare_r2_managed_domain\.data\.domain\}"/,
+      );
     });
   });
 });

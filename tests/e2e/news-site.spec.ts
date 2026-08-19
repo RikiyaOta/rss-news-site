@@ -183,6 +183,15 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
 
     // sql.js の wasm ファイルリクエストをローカルファイルでインターセプト
     await page.route(/.*sql-wasm.*\.wasm/, async (route) => {
+      const req = route.request();
+      if (
+        req.resourceType() === "script" ||
+        req.url().includes("import") ||
+        req.url().includes("?url")
+      ) {
+        await route.continue();
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/wasm",
@@ -220,7 +229,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await page.goto("/");
 
     // 1. タイトル「AI RSS News Dashboard」が表示されること
-    const heading = page.getByRole("heading", { name: "AI RSS News Dashboard" });
+    const heading = page.getByRole("heading", { name: /AI RSS News Dashboard/ });
     await expect(heading).toBeVisible();
 
     // 2. 日付ナビゲーションとカレンダーピッカーが表示されること
@@ -344,7 +353,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await page.goto("/");
 
     // ヘッダーとタイトルが表示されていること
-    const heading = page.getByRole("heading", { name: "AI RSS News Dashboard" });
+    const heading = page.getByRole("heading", { name: /AI RSS News Dashboard/ });
     await expect(heading).toBeVisible();
 
     // 日付ピッカーとナビゲーションが表示されていること
