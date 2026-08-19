@@ -15,7 +15,7 @@ output "pages_subdomain" {
 
 output "custom_domain" {
   description = "Cloudflare Pages custom domain"
-  value       = cloudflare_pages_domain.custom.domain
+  value       = cloudflare_pages_domain.custom.name
 }
 
 output "r2_public_url" {

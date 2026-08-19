@@ -51,6 +51,40 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm pinact:check
 
+      - name: Terraform 初期化 & 構文検証 (validate)
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          if [ -n "${{ secrets.R2_ACCESS_KEY_ID }}" ]; then
+            terraform init
+          else
+            terraform init -backend=false
+          fi
+          terraform validate
+
+      - name: Terraform Plan 実行
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$TF_VAR_cloudflare_api_token" ] && [ -n "$TF_VAR_cloudflare_account_id" ]; then
+            terraform plan -no-color > plan.txt 2>&1 || true
+            cat plan.txt
+            echo "### 🏗️ Terraform Plan サマリー" >> $GITHUB_STEP_SUMMARY
+            echo '```terraform' >> $GITHUB_STEP_SUMMARY
+            cat plan.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Cloudflare API Token 未設定のため terraform plan をスキップします"
+          fi
+
       - name: テスト実行とカバレッジ計測
         run: |
           pnpm test:coverage > coverage_raw.txt 2>&1
@@ -61,19 +95,29 @@ jobs:
           sed -n '/% Coverage report from v8/,$p' coverage_clean.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: PR Conversation にテストカバレッジをコメント投稿
+      - name: PR Conversation に CI レポート (Terraform Plan & テストカバレッジ) をコメント投稿
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           COVERAGE_BODY=$(sed -n '/% Coverage report from v8/,$p' coverage_clean.txt)
-          gh pr comment "$PR_NUMBER" --body "### 📊 テストカバレッジレポート
+          PLAN_SECTION=""
+          if [ -f terraform/plan.txt ]; then
+            PLAN_BODY=$(cat terraform/plan.txt)
+            PLAN_SECTION="### 🏗️ Terraform Plan レポート
 
+          \`\`\`terraform
+          $PLAN_BODY
           \`\`\`
-          $COVERAGE_BODY
-          \`\`\`" --edit-last || gh pr comment "$PR_NUMBER" --body "### 📊 テストカバレッジレポート
+
+          "
+          fi
+
+          REPORT_BODY="${PLAN_SECTION}### 📊 テストカバレッジレポート
 
           \`\`\`
           $COVERAGE_BODY
           \`\`\`"
+
+          gh pr comment "$PR_NUMBER" --body "$REPORT_BODY" --edit-last || gh pr comment "$PR_NUMBER" --body "$REPORT_BODY"
