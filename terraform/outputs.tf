@@ -12,3 +12,8 @@ output "pages_subdomain" {
   description = "Cloudflare Pages subdomain URL"
   value       = cloudflare_pages_project.site.subdomain
 }
+
+output "custom_domain" {
+  description = "Cloudflare Pages custom domain"
+  value       = cloudflare_pages_domain.custom.domain
+}

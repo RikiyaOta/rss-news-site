@@ -41,3 +41,9 @@ resource "cloudflare_pages_project" "site" {
     }
   }
 }
+
+resource "cloudflare_pages_domain" "custom" {
+  account_id   = var.cloudflare_account_id
+  project_name = cloudflare_pages_project.site.name
+  domain       = var.custom_domain
+}

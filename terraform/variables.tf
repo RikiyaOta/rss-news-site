@@ -33,3 +33,9 @@ variable "r2_cors_allowed_origins" {
   type        = list(string)
   default     = ["https://rss-news.rikiyaota.kyoto", "http://localhost:5173"]
 }
+
+variable "custom_domain" {
+  description = "Custom domain for Cloudflare Pages"
+  type        = string
+  default     = "rss-news.rikiyaota.kyoto"
+}
