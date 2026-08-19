@@ -102,6 +102,23 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       expect(content).toContain("pnpm test:coverage");
       expect(content).toContain("GITHUB_STEP_SUMMARY");
     });
+
+    it("CI ワークフローに pinact によるアクション検証ステップが含まれていること", () => {
+      const filePath = path.join(workflowsDir, "ci.yml");
+      const content = fs.readFileSync(filePath, "utf-8");
+
+      expect(content).toContain("pinact");
+      expect(content).toMatch(/pinact:check|pinact\s+run\s+--check/);
+    });
+
+    it("package.json に pinact:check スクリプトが定義されていること", () => {
+      const pkgPath = path.join(rootDir, "package.json");
+      const pkgContent = fs.readFileSync(pkgPath, "utf-8");
+      const pkg = JSON.parse(pkgContent);
+
+      expect(pkg.scripts["pinact:check"]).toBeDefined();
+      expect(pkg.scripts["pinact:check"]).toContain("pinact run --check --verify");
+    });
   });
 
   describe("日次巡回パイプラインワークフロー (daily-pipeline.yml) の設定検証", () => {
