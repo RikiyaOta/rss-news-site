@@ -1,4 +1,12 @@
-import { pipeline } from "@huggingface/transformers";
+import { env, pipeline } from "@huggingface/transformers";
+
+// ブラウザ Web Worker 環境用の Hugging Face Transformers 設定
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+// COOP/COEP ヘッダー不要化のためシングルスレッドに設定
+if (env.backends?.onnx?.wasm) {
+  env.backends.onnx.wasm.numThreads = 1;
+}
 
 let extractor: any = null;
 

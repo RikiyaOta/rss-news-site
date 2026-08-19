@@ -89,7 +89,12 @@ export function embedQuery(query: string, options?: EmbedQueryOptions): Promise<
 
     const errorHandler = (e: ErrorEvent | any) => {
       cleanup();
-      const msg = e?.message || "Worker でエラーが発生しました";
+      const msg =
+        e?.message ||
+        e?.error?.message ||
+        (e?.filename
+          ? `${e.message} (${e.filename}:${e.lineno})`
+          : "Worker でエラーが発生しました");
       reject(new Error(msg));
     };
 
