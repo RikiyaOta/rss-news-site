@@ -18,8 +18,9 @@
     "fmt:check": "oxfmt --check src tests",
     "lint:tf": "terraform fmt -check -recursive terraform",
     "fmt:tf": "terraform fmt -recursive terraform",
-    "check": "pnpm typecheck && pnpm lint && pnpm fmt:check && pnpm lint:tf && pnpm test",
-    "pinact": "pinact run .github/workflows/*.yml"
+    "check": "pnpm typecheck && pnpm lint && pnpm fmt:check && pnpm lint:tf && pnpm pinact:check && pnpm test",
+    "pinact": "pinact run .github/workflows/*.yml",
+    "pinact:check": "pinact run --check --verify .github/workflows/*.yml"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.750.0",

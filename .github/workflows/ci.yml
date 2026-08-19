@@ -46,6 +46,11 @@ jobs:
       - name: Terraform フォーマット検証
         run: pnpm lint:tf
 
+      - name: GitHub Actions pinact 検証
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm pinact:check
+
       - name: テスト実行とカバレッジ計測
         run: |
           pnpm test:coverage > coverage_raw.txt 2>&1
