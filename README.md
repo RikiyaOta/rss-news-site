@@ -57,13 +57,14 @@ Terraform の状態ファイル（`terraform.tfstate`）を管理するため、
 
 | シークレット名 | 説明 | 必須 |
 |---|---|:---:|
-| `GEMINI_API_KEY` | Google AI Studio で発行した Gemini API キー | 必須 |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID | 必須 |
+| `GEMINI_API_KEY` | Google AI Studio で発行した Gemini API キー（Daily Pipeline 用） | 必須 |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID（Terraform / Pages デプロイ用） | 必須 |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Pages & R2 の編集権限を持つ API トークン | 必須 |
-| `R2_ACCESS_KEY_ID` | Cloudflare R2 の S3 互換 Access Key ID | 必須 |
-| `R2_SECRET_ACCESS_KEY` | Cloudflare R2 の S3 互換 Secret Access Key | 必須 |
+| `R2_ACCESS_KEY_ID` | Cloudflare R2 の S3 互換 Access Key ID（Daily Pipeline / Deploy 用） | 必須 |
+| `R2_SECRET_ACCESS_KEY` | Cloudflare R2 の S3 互換 Secret Access Key（Daily Pipeline / Deploy 用） | 必須 |
+| `R2_ACCOUNT_ID` | Cloudflare アカウント ID（Daily Pipeline の R2 クライアント用）。未設定の場合は `CLOUDFLARE_ACCOUNT_ID` を流用 | 任意 |
 | `R2_BUCKET_NAME` | データ配信用の R2 バケット名（未設定時は `rss-news-site-data`） | 任意 |
-| `VITE_R2_PUBLIC_URL` | R2 バケットの公開アクセス URL / カスタムドメイン | 任意 |
+| `VITE_R2_PUBLIC_URL` | R2 バケットの公開アクセス URL / カスタムドメイン（未設定時は `https://rss-news.rikiyaota.kyoto`） | 任意 |
 
 ### 3. 初回デプロイとデータ生成
 
