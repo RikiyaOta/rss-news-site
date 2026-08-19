@@ -1,5 +1,5 @@
 import { Article, SearchResultItem } from "../../shared/types";
-import { ExternalLink, Sparkles, Calendar, Tag, CheckCircle2 } from "lucide-react";
+import { ExternalLink, Sparkles, Calendar, Tag } from "lucide-react";
 
 export interface ArticleCardProps {
   article: Article | SearchResultItem;
@@ -49,16 +49,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
   const isSearchResult =
     "similarity" in article && typeof (article as SearchResultItem).similarity === "number";
   const searchItem = isSearchResult ? (article as SearchResultItem) : null;
-
   const scoreStyle = getScoreBadgeStyle(article.score);
-
-  // 要約を行ごとに分割して整形
-  const summaryLines = (article.summary || "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .map((line) => line.replace(/^[・\-*•\d.\s]+/, "").trim())
-    .filter((line) => line.length > 0);
 
   return (
     <article
@@ -105,7 +96,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
         </div>
 
         {/* 記事タイトル */}
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 leading-snug mb-3">
+        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 leading-snug mb-2">
           <a
             href={article.url}
             target="_blank"
@@ -117,22 +108,11 @@ export function ArticleCard({ article }: ArticleCardProps) {
           </a>
         </h3>
 
-        {/* 3行要約 */}
-        {summaryLines.length > 0 && (
-          <div className="bg-zinc-50 dark:bg-zinc-800/50 rounded-lg p-3 mb-4 border border-zinc-100 dark:border-zinc-800/80">
-            <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mb-1.5 flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-amber-500" />
-              AI 3行要約
-            </p>
-            <ul className="space-y-1.5 text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed">
-              {summaryLines.map((line, idx) => (
-                <li key={idx} className="flex items-start gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-emerald-500 dark:text-emerald-400" />
-                  <span>{line}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {/* 抜粋テキスト（スニペット） */}
+        {article.summary && article.summary.trim().length > 0 && (
+          <p className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2 leading-relaxed mb-3">
+            {article.summary}
+          </p>
         )}
       </div>
 

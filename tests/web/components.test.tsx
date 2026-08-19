@@ -14,8 +14,7 @@ describe("フロントエンド React コンポーネントのテスト", () => 
       title: "React 19の新機能とパフォーマンス改善",
       url: "https://example.com/react-19-features",
       source_name: "Tech Blog",
-      summary:
-        "・React 19の新機能について解説\n・Actionsによる非同期処理の簡素化\n・Server Componentsの強化",
+      summary: "React 19の新機能について解説。Actionsによる非同期処理の簡素化やServer Componentsの強化が行われました。",
       score: 85,
       published_at: "2026-08-19T10:00:00.000Z",
     };
@@ -33,12 +32,16 @@ describe("フロントエンド React コンポーネントのテスト", () => 
       expect(screen.getByText(/2026/)).toBeDefined();
     });
 
-    it("3行要約が箇条書き項目として整形されて表示されること", () => {
+    it("記事の抜粋（スニペット）が表示され、「AI 3行要約」ボックスは描画されないこと", () => {
       render(<ArticleCard article={mockArticle} />);
 
-      expect(screen.getByText(/React 19の新機能について解説/)).toBeDefined();
-      expect(screen.getByText(/Actionsによる非同期処理の簡素化/)).toBeDefined();
-      expect(screen.getByText(/Server Componentsの強化/)).toBeDefined();
+      expect(screen.getByText(mockArticle.summary)).toBeDefined();
+      expect(screen.queryByText("AI 3行要約")).toBeNull();
+    });
+
+    it("要約が空または未定義の場合、抜粋テキストが描画されないこと", () => {
+      const { container } = render(<ArticleCard article={{ ...mockArticle, summary: "" }} />);
+      expect(container.querySelector("p.line-clamp-2")).toBeNull();
     });
 
     it("スコアが80点以上の場合、高スコア（グリーン系）のスタイルが適用されること", () => {
