@@ -249,6 +249,39 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
       expect(articles[1].source_name).toBe("Test Feed");
     });
 
+    it("URLが空または未指定の無効なフィードアイテムを除外して有効な記事のみを返却すること", async () => {
+      const source: FeedSource = {
+        name: "Test Feed",
+        url: "https://example.com/feed.xml",
+      };
+
+      mockParser.parseURL.mockResolvedValue({
+        items: [
+          {
+            title: "有効な記事",
+            link: "https://example.com/valid",
+            contentSnippet: "概要1",
+          },
+          {
+            title: "URLなしの記事",
+            link: "",
+            guid: "   ",
+            contentSnippet: "概要2",
+          },
+          {
+            title: "リンクプロパティなしの記事",
+            contentSnippet: "概要3",
+          },
+        ],
+      });
+
+      const articles = await fetchFeedArticles(source, mockParser);
+
+      expect(articles).toHaveLength(1);
+      expect(articles[0].title).toBe("有効な記事");
+      expect(articles[0].url).toBe("https://example.com/valid");
+    });
+
     it("フィード取得時にエラーが発生した場合にエラーログを出力し空配列を返すこと", async () => {
       const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
       const source: FeedSource = {

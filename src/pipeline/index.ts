@@ -10,6 +10,7 @@ import {
   initDailyDatabase,
   initSearchIndexDatabase,
   getExistingArticleIds,
+  getExistingSearchIndexIds,
   insertArticles,
   insertVectors,
   SearchVectorRecord,
@@ -81,6 +82,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
 
   try {
     const existingDailyIds = getExistingArticleIds(dailyDb);
+    const existingSearchIndexIds = getExistingSearchIndexIds(searchDb);
 
     console.log(`[2/5] RSSフィードを巡回中... (${configPath})`);
     const config = loadConfig(configPath);
@@ -92,7 +94,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     }
 
     totalFetched = allArticles.length;
-    const seenIds = new Set<string>(existingDailyIds);
+    const seenIds = new Set<string>([...existingDailyIds, ...existingSearchIndexIds]);
     const targetArticles: RawArticle[] = [];
 
     for (const raw of allArticles) {

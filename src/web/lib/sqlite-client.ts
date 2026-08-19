@@ -149,7 +149,8 @@ export async function searchArticlesByVector(
       const row = stmt.getAsObject();
       const raw = row.embedding;
       const uint8 = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
-      const vec = new Float32Array(uint8.buffer, uint8.byteOffset, uint8.byteLength / 4);
+      const slice = uint8.buffer.slice(uint8.byteOffset, uint8.byteOffset + uint8.byteLength);
+      const vec = new Float32Array(slice);
       const similarity = cosineSimilarity(queryVec, vec);
       candidates.push({
         article_id: String(row.article_id),

@@ -320,6 +320,60 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       verifyDb.close();
     });
 
+    it("search_index.db (過去日) に既に存在する記事IDはスキップされ、Gemini要約やベクトル化が実行されないこと", async () => {
+      const outputDir = path.join(tempDir, "data");
+      const sleepSpy = vi.fn().mockResolvedValue(undefined);
+      fs.mkdirSync(outputDir, { recursive: true });
+
+      // 事前に search_index.db に前日 (2026-08-18) の記事1を保存しておく
+      const preSearchDbPath = path.join(outputDir, "search_index.db");
+      const preSearchDb = initDailyDatabase(preSearchDbPath);
+      // search_index テーブルの初期化とデータ挿入
+      preSearchDb.exec(`
+        CREATE TABLE IF NOT EXISTS search_index (
+          article_id TEXT PRIMARY KEY,
+          date TEXT NOT NULL,
+          embedding BLOB NOT NULL
+        );
+      `);
+      preSearchDb
+        .prepare("INSERT INTO search_index VALUES (?, ?, ?)")
+        .run(sampleRawArticles[0].id, "2026-08-18", Buffer.alloc(384 * 4));
+      preSearchDb.close();
+
+      // 当日の日別DBは空
+      // RSSからは計2件取得される（前日にもあった記事0と新規記事1）
+      vi.spyOn(fetcherModule, "fetchFeedArticles").mockImplementation(async (source) => {
+        if (source.name === "Tech Feed 1") return [sampleRawArticles[0], sampleRawArticles[1]];
+        return [];
+      });
+      const summarizeSpy = vi.spyOn(geminiModule, "summarizeAndScoreArticle").mockResolvedValue({
+        summary: "新規要約",
+        score: 85,
+      });
+      const embedSpy = vi
+        .spyOn(embedderModule, "generateArticleEmbedding")
+        .mockResolvedValue(new Float32Array(384).fill(0.1));
+
+      const result = await runPipeline({
+        dateStr: "2026-08-19",
+        configPath: configFilePath,
+        outputDir,
+        skipR2: true,
+        sleepFn: sleepSpy,
+      });
+
+      expect(result.totalFetched).toBe(2);
+      expect(result.skippedCount).toBe(1);
+      expect(result.processedCount).toBe(1);
+      expect(result.articles.length).toBe(1);
+      expect(result.articles[0].id).toBe(sampleRawArticles[1].id);
+
+      // AI要約およびベクトル化は過去に存在しない新規の1件に対してのみ実行される
+      expect(summarizeSpy).toHaveBeenCalledTimes(1);
+      expect(embedSpy).toHaveBeenCalledTimes(1);
+    });
+
     it("フィード内で同一記事IDが重複している場合、重複が排除されて1度のみ処理されること", async () => {
       const outputDir = path.join(tempDir, "data");
       const sleepSpy = vi.fn().mockResolvedValue(undefined);

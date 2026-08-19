@@ -27,3 +27,9 @@ variable "production_branch" {
   type        = string
   default     = "main"
 }
+
+variable "r2_cors_allowed_origins" {
+  description = "Allowed origins for Cloudflare R2 CORS"
+  type        = list(string)
+  default     = ["https://rss-news.rikiyaota.kyoto", "http://localhost:5173"]
+}

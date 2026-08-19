@@ -151,6 +151,7 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       const content = fs.readFileSync(filePath, "utf-8");
 
       expect(content).toContain("pnpm build");
+      expect(content).toContain("VITE_R2_PUBLIC_URL");
       expect(content).toMatch(/terraform\s+init/);
       expect(content).toMatch(/terraform\s+apply/);
     });

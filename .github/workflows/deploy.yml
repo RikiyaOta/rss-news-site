@@ -19,6 +19,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: フロントエンドビルド
+        env:
+          VITE_R2_PUBLIC_URL: ${{ secrets.VITE_R2_PUBLIC_URL || 'https://rss-news.rikiyaota.kyoto' }}
         run: pnpm build
 
       - name: Terraform 初期化

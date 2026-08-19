@@ -74,7 +74,9 @@ export async function fetchFeedArticles(
   try {
     const feed = await parser.parseURL(source.url);
     const items = feed?.items ?? [];
-    return items.map((item) => normalizeFeedItem(item, source.name));
+    return items
+      .map((item) => normalizeFeedItem(item, source.name))
+      .filter((article) => Boolean(article.url && article.url.trim()));
   } catch (error) {
     console.error(`フィード取得失敗 [${source.name} - ${source.url}]:`, error);
     return [];

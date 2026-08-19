@@ -399,6 +399,58 @@ describe("Wasm SQLite クライアント & 差分DB結合 (sqlite-client)", () =
     expect(results.every((r) => r.date === "2026-08-19")).toBe(true);
   });
 
+  it("searchArticlesByVector: 非4バイト整列オフセットを持つ Uint8Array BLOB でも RangeError を起こさずに正しく処理できること", async () => {
+    // 検索インデックスDB (search_index.db) を作成し、非4バイト整列オフセットの Uint8Array でモック
+    const customSDb = new SQL.Database();
+    customSDb.run(`
+      CREATE TABLE search_index (
+        article_id TEXT PRIMARY KEY,
+        date TEXT NOT NULL,
+        embedding BLOB NOT NULL
+      );
+    `);
+
+    // 384次元ベクトル作成
+    const vec = new Float32Array(384);
+    vec[0] = 1.0;
+
+    // オフセットが奇数 (例: 1) の Uint8Array を作成
+    const largerBuffer = new ArrayBuffer(vec.byteLength + 10);
+    const unalignedUint8 = new Uint8Array(largerBuffer, 1, vec.byteLength);
+    unalignedUint8.set(new Uint8Array(vec.buffer));
+
+    const stmt = customSDb.prepare("INSERT INTO search_index VALUES (?, ?, ?)");
+    stmt.run(["id-3", "2026-08-19", unalignedUint8]);
+    stmt.free();
+
+    const customSearchBuffer = customSDb.export();
+    customSDb.close();
+
+    const mockFetch = vi.fn(async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("2026-08-19.db")) {
+        return new Response(dailyDbBuffer2.buffer as ArrayBuffer, { status: 200 });
+      }
+      if (urlStr.includes("search_index.db")) {
+        return new Response(customSearchBuffer.buffer as ArrayBuffer, { status: 200 });
+      }
+      return new Response("Not Found", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const queryVec = new Float32Array(384);
+    queryVec[0] = 1.0;
+
+    const results = await searchArticlesByVector("https://r2.example.com", queryVec, {
+      topK: 10,
+      customFetch: mockFetch,
+      customSql: SQL,
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe("id-3");
+    expect(results[0].similarity).toBeCloseTo(1.0);
+  });
+
   it("getSql: シングルトンとして同じインスタンスを再利用すること", async () => {
     const sql1 = await getSql();
     const sql2 = await getSql();

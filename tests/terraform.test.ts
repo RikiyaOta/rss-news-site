@@ -65,6 +65,16 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       expect(content).toMatch(/destination_dir\s*=\s*"dist"/);
       expect(content).toMatch(/NODE_VERSION\s*=\s*"24"/);
     });
+
+    it("Cloudflare R2 バケットの CORS 設定 (cloudflare_r2_bucket_cors) が正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/resource\s+"cloudflare_r2_bucket_cors"/);
+      expect(content).toMatch(/bucket_name\s*=\s*cloudflare_r2_bucket\.data\.name/);
+      expect(content).toMatch(/allowed/);
+      expect(content).toMatch(/methods\s*=\s*\[.*"GET".*\]/);
+    });
   });
 
   describe("variables.tf の変数定義検証", () => {
@@ -103,6 +113,14 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
 
       expect(content).toMatch(/variable\s+"production_branch"/);
       expect(content).toMatch(/default\s*=\s*"main"/);
+    });
+
+    it("r2_cors_allowed_origins 変数が 'https://rss-news.rikiyaota.kyoto' を含むリストとして定義されていること", () => {
+      const varsPath = path.join(tfDir, "variables.tf");
+      const content = fs.readFileSync(varsPath, "utf-8");
+
+      expect(content).toMatch(/variable\s+"r2_cors_allowed_origins"/);
+      expect(content).toMatch(/https:\/\/rss-news\.rikiyaota\.kyoto/);
     });
   });
 

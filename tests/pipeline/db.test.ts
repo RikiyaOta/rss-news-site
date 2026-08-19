@@ -6,6 +6,7 @@ import {
   initDailyDatabase,
   initSearchIndexDatabase,
   getExistingArticleIds,
+  getExistingSearchIndexIds,
   insertArticles,
   insertVectors,
   getArticlesByScore,
@@ -407,6 +408,41 @@ describe("SQLite データベース操作モジュール (src/pipeline/db) の�
       try {
         expect(() => insertVectors(db, [])).not.toThrow();
         expect(getAllSearchVectors(db)).toEqual([]);
+      } finally {
+        db.close();
+      }
+    });
+
+    it("getExistingSearchIndexIds で search_index テーブル内の全 article_id を Set として取得できること", () => {
+      const dbPath = path.join(tempDir, "search_ids.db");
+      const db = initSearchIndexDatabase(dbPath);
+
+      try {
+        // 空DBの確認
+        let ids = (db as any).getExistingSearchIndexIds
+          ? (db as any).getExistingSearchIndexIds(db)
+          : getExistingSearchIndexIds(db);
+        expect(ids).toBeInstanceOf(Set);
+        expect(ids.size).toBe(0);
+
+        insertVectors(db, [
+          {
+            article_id: "art-101",
+            date: "2026-08-18",
+            embedding: new Float32Array(384),
+          },
+          {
+            article_id: "art-102",
+            date: "2026-08-19",
+            embedding: new Float32Array(384),
+          },
+        ]);
+
+        ids = getExistingSearchIndexIds(db);
+        expect(ids.size).toBe(2);
+        expect(ids.has("art-101")).toBe(true);
+        expect(ids.has("art-102")).toBe(true);
+        expect(ids.has("art-999")).toBe(false);
       } finally {
         db.close();
       }

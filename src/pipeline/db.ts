@@ -70,6 +70,16 @@ export function getExistingArticleIds(db: DatabaseType): Set<string> {
 }
 
 /**
+ * search_index テーブル内の全 article_id を Set として取得する（過去全期間の重複巡回除外用）
+ */
+export function getExistingSearchIndexIds(db: DatabaseType): Set<string> {
+  const rows = db.prepare("SELECT article_id FROM search_index").all() as Array<{
+    article_id: string;
+  }>;
+  return new Set(rows.map((row) => row.article_id));
+}
+
+/**
  * 記事リストをトランザクション内で一括挿入または更新する
  */
 export function insertArticles(db: DatabaseType, articles: Article[]): void {
