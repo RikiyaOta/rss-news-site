@@ -119,12 +119,13 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       expect(pkg.scripts["pinact:check"]).toContain("pinact run --check --verify");
     });
 
-    it("Terraform 初期化および構文検証 (terraform validate) が含まれていること", () => {
+    it("Terraform 初期化、構文検証 (validate)、および計画実行 (plan) が含まれていること", () => {
       const filePath = path.join(workflowsDir, "ci.yml");
       const content = fs.readFileSync(filePath, "utf-8");
 
-      expect(content).toContain("terraform init -backend=false");
+      expect(content).toMatch(/terraform\s+init/);
       expect(content).toContain("terraform validate");
+      expect(content).toContain("terraform plan");
     });
   });
 
