@@ -1,8 +1,21 @@
 import initSqlJs from "sql.js";
+import sqlWasmUrl from "sql.js/dist/sql-wasm.wasm?url";
 import { Article, SearchResultItem } from "../../shared/types";
 
 let SQL: any = null;
 const dbCache = new Map<string, any>();
+
+const SQLITE3_HEADER = "SQLite format 3\0";
+
+/**
+ * ArrayBuffer が有効な SQLite 3 データベースヘッダーを持つか検証する
+ */
+export function isSqliteDatabase(buffer: ArrayBuffer): boolean {
+  if (!buffer || buffer.byteLength < 16) return false;
+  const headerBytes = new Uint8Array(buffer, 0, 16);
+  const headerStr = String.fromCharCode(...headerBytes);
+  return headerStr === SQLITE3_HEADER;
+}
 
 /**
  * 2つの正規化済み Float32Array ベクトル間のコサイン類似度（内積）を計算する
@@ -29,8 +42,7 @@ export async function getSql(customInitSqlJs?: any): Promise<any> {
   if (typeof init === "function") {
     const config: any = {};
     if (typeof window !== "undefined") {
-      config.locateFile = (file: string) =>
-        `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.12.0/${file.replace("-browser", "")}`;
+      config.locateFile = () => sqlWasmUrl;
     }
     const instance = await init(config);
     if (!customInitSqlJs) {
@@ -61,6 +73,10 @@ export async function loadDatabaseFromUrl(
   }
 
   const buffer = await res.arrayBuffer();
+  if (!isSqliteDatabase(buffer)) {
+    throw new Error("不正なDB形式またはHTMLエラーレスポンスです");
+  }
+
   const sql = customSql || (await getSql());
   const db = new sql.Database(new Uint8Array(buffer));
   dbCache.set(url, db);
