@@ -14,7 +14,8 @@ describe("フロントエンド React コンポーネントのテスト", () => 
       title: "React 19の新機能とパフォーマンス改善",
       url: "https://example.com/react-19-features",
       source_name: "Tech Blog",
-      summary: "React 19の新機能について解説。Actionsによる非同期処理の簡素化やServer Componentsの強化が行われました。",
+      summary:
+        "React 19の新機能について解説。Actionsによる非同期処理の簡素化やServer Componentsの強化が行われました。",
       score: 85,
       published_at: "2026-08-19T10:00:00.000Z",
     };

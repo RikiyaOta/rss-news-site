@@ -101,11 +101,11 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
   const todayArticles = [
     {
       id: "art-today-1",
-      title: "AI RSS News Dashboard 正式リリースとGemini 2.5要約機能",
+      title: "AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能",
       url: "https://example.com/today-1",
       source_name: "Tech Portal",
       summary:
-        "・Cloudflare R2とWasm SQLiteを活用したサーバーレス構成\n・Gemini 2.5による高精度3行要約と興味関心スコアリング\n・ブラウザ内Transformers.jsによる自然言語ベクトル検索",
+        "Cloudflare R2とWasm SQLiteを活用したサーバーレス構成。多言語ベクトルモデルによる高速な興味関心スコアリングとブラウザ内セマンティック検索を提供します。",
       score: 95,
       published_at: `${todayStr}T08:00:00.000Z`,
     },
@@ -115,7 +115,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
       url: "https://example.com/today-2",
       source_name: "TypeScript News",
       summary:
-        "・モジュール解決パフォーマンスの大幅な改善\n・新しい型アサーション構文のサポート\n・ECMAScript最新仕様への追従と互換性向上",
+        "モジュール解決パフォーマンスの大幅な改善と新しい型アサーション構文のサポートにより、開発効率がさらに向上しました。",
       score: 82,
       published_at: `${todayStr}T09:30:00.000Z`,
     },
@@ -128,7 +128,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
       url: "https://example.com/yest-1",
       source_name: "Dev Weekly",
       summary:
-        "・WebAssemblyとクライアントサイドDBの最新事例\n・エッジコンピューティングにおけるベクトル検索の進化\n・オープンソースLLMのブラウザ内実行手法",
+        "WebAssemblyとクライアントサイドDBの最新事例。エッジコンピューティングにおけるベクトル検索の進化とオープンソースLLMの活用手法について解説します。",
       score: 88,
       published_at: `${yesterdayStr}T12:00:00.000Z`,
     },
@@ -233,27 +233,20 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await expect(prevBtn).toBeVisible();
     await expect(nextBtn).toBeVisible();
 
-    // 3. 記事カードにタイトル、発信元バッジ、興味関心スコアバッジ、3行要約箇条書きが表示されること
+    // 3. 記事カードにタイトル、発信元バッジ、興味関心スコアバッジ、要約スニペットが表示されること
     const articleCards = page.getByTestId("article-card");
     await expect(articleCards).toHaveCount(2);
 
     const firstCard = articleCards.first();
     await expect(
       firstCard.getByRole("heading", {
-        name: "AI RSS News Dashboard 正式リリースとGemini 2.5要約機能",
+        name: "AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能",
       }),
     ).toBeVisible();
     await expect(firstCard.getByText("Tech Portal")).toBeVisible();
     await expect(firstCard.getByTestId("score-badge")).toHaveText(/スコア:\s*95点/);
-    await expect(firstCard.getByText("AI 3行要約")).toBeVisible();
     await expect(
-      firstCard.getByText("Cloudflare R2とWasm SQLiteを活用したサーバーレス構成"),
-    ).toBeVisible();
-    await expect(
-      firstCard.getByText("Gemini 2.5による高精度3行要約と興味関心スコアリング"),
-    ).toBeVisible();
-    await expect(
-      firstCard.getByText("ブラウザ内Transformers.jsによる自然言語ベクトル検索"),
+      firstCard.getByText(/Cloudflare R2とWasm SQLiteを活用したサーバーレス構成/),
     ).toBeVisible();
   });
 
@@ -279,7 +272,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
 
     await expect(dateInput).toHaveValue(todayStr);
     await expect(
-      page.getByText("AI RSS News Dashboard 正式リリースとGemini 2.5要約機能"),
+      page.getByText("AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能"),
     ).toBeVisible();
   });
 
@@ -339,7 +332,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await expect(dateInput).toBeVisible();
     await expect(dateInput).toHaveValue(todayStr);
     await expect(
-      page.getByText("AI RSS News Dashboard 正式リリースとGemini 2.5要約機能"),
+      page.getByText("AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能"),
     ).toBeVisible();
   });
 
@@ -362,6 +355,8 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     const articleCards = page.getByTestId("article-card");
     await expect(articleCards.first()).toBeVisible();
     await expect(articleCards.first().getByTestId("score-badge")).toBeVisible();
-    await expect(articleCards.first().getByText("AI 3行要約")).toBeVisible();
+    await expect(
+      articleCards.first().getByText(/Cloudflare R2とWasm SQLiteを活用したサーバーレス構成/),
+    ).toBeVisible();
   });
 });

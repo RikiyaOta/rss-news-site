@@ -2,16 +2,16 @@
 
 完全無料で運用可能な、AI駆動型の個人向けニュース収集・要約・セマンティック検索ダッシュボードシステムです。
 
-GitHub Actions による毎日の自動巡回で最新の技術記事を収集し、Gemini による3行要約と興味関心スコアリング、さらにブラウザ内の WebAssembly 版 SQLite（`sql.js`）と多言語ベクトルモデル（`intfloat/multilingual-e5-small`）を活用した爆速の自然言語横断検索を提供します。
+GitHub Actions による毎日の自動巡回で最新の技術記事を収集し、多言語ベクトルモデル（`intfloat/multilingual-e5-small`）による興味関心スコアリングとメタデータ抽出、さらにブラウザ内の WebAssembly 版 SQLite（`sql.js`）を活用した爆速の自然言語横断検索を提供します。
 
 ---
 
 ## 🌟 主な特徴
 
 - **完全無料運用（ゼロサーバー構成）:**
-  - サーバーサイド DB を常時稼働させず、静的ホスティング（Cloudflare Pages）とオブジェクトストレージ（Cloudflare R2）のみで構成。
-- **AI 要約 & 興味関心スコアリング:**
-  - Gemini 2.5 Flash-Lite を用いて各記事を箇条書き3行で日本語要約し、ユーザープロファイルに基づき 0〜100 点でスコアリング。
+  - サーバーサイド DB を常時稼働させず、静的ホスティング（Cloudflare Pages）とオブジェクトストレージ（Cloudflare R2）のみで構成。外部 LLM API キーも不要。
+- **ローカル多言語ベクトルによる興味関心スコアリング:**
+  - `intfloat/multilingual-e5-small` を用いて記事とユーザー関心プロファイルのコサイン類似度をローカル計算し、0〜100 点でスコアリング。
 - **ブラウザ内セマンティック検索（ベクトル検索）:**
   - Web Worker 上で検索クエリを 384 次元ベクトル化し、Wasm SQLite で過去全期間の記事から類似記事をミリ秒単位で高速検索。
 - **差分ダウンロード & インメモリ結合:**
@@ -26,9 +26,9 @@ GitHub Actions による毎日の自動巡回で最新の技術記事を収集�
 ```
 [ GitHub Actions (日次自動実行: Cron) ]
   │
-  ├── 1. 各 RSS フィードから新規記事を取得
-  ├── 2. Gemini API で日本語3行要約 & スコアリング
-  ├── 3. multilingual-e5-small で記事埋め込みベクトル生成 (384次元)
+  ├── 1. 各 RSS フィードから新規記事を取得 & メタデータ補完 (og:description)
+  ├── 2. multilingual-e5-small で記事埋め込みベクトル生成 (384次元)
+  ├── 3. ユーザー関心プロファイルとのコサイン類似度に基づくローカル自動スコアリング
   ├── 4. 日別記事 SQLite DB (data/YYYY-MM-DD.db) & 全体検索インデックス (search_index.db) を更新
   └── 5. Cloudflare R2 ストレージへアップロード
 
@@ -57,7 +57,6 @@ Terraform の状態ファイル（`terraform.tfstate`）を管理するため、
 
 | シークレット名 | 説明 | 必須 |
 |---|---|:---:|
-| `GEMINI_API_KEY` | Google AI Studio で発行した Gemini API キー（Daily Pipeline 用） | 必須 |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID（Terraform / Pages デプロイ用） | 必須 |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare Pages & R2 の編集権限を持つ API トークン | 必須 |
 | `R2_ACCESS_KEY_ID` | Cloudflare R2 の S3 互換 Access Key ID（Daily Pipeline / Deploy 用） | 必須 |
