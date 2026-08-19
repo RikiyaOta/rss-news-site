@@ -33,16 +33,14 @@ export function l2Normalize(vector: Float32Array | number[]): Float32Array {
  */
 export async function getExtractor(customPipeline?: any): Promise<any> {
   if (customPipeline) {
-    extractorInstance = await customPipeline(
-      "feature-extraction",
-      "intfloat/multilingual-e5-small",
-      { dtype: "fp32" },
-    );
+    extractorInstance = await customPipeline("feature-extraction", "Xenova/multilingual-e5-small", {
+      dtype: "fp32",
+    });
     return extractorInstance;
   }
 
   if (!extractorInstance) {
-    extractorInstance = await pipeline("feature-extraction", "intfloat/multilingual-e5-small", {
+    extractorInstance = await pipeline("feature-extraction", "Xenova/multilingual-e5-small", {
       dtype: "fp32",
     });
   }

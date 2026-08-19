@@ -33,6 +33,8 @@ jobs:
         run: pnpm exec playwright install --with-deps
 
       - name: E2E テスト実行
+        env:
+          E2E_REAL_MODEL: "true"
         run: pnpm test:e2e
 
       - name: Playwright レポートの保存

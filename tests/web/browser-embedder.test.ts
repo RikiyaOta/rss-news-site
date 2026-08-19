@@ -374,7 +374,7 @@ describe("Worker 内部メッセージハンドラ (embedder.worker)", () => {
     });
   });
 
-  it("getWorkerExtractor: feature-extraction, intfloat/multilingual-e5-small, dtype: q8 でパイプラインを初期化すること", async () => {
+  it("getWorkerExtractor: feature-extraction, Xenova/multilingual-e5-small, dtype: q8 でパイプラインを初期化すること", async () => {
     const mockCustomPipeline = vi.fn(async (task: string, model: string, opts: any) => {
       return { task, model, opts };
     });
@@ -382,10 +382,10 @@ describe("Worker 内部メッセージハンドラ (embedder.worker)", () => {
     const ext1 = await getWorkerExtractor(mockCustomPipeline);
     expect(mockCustomPipeline).toHaveBeenCalledWith(
       "feature-extraction",
-      "intfloat/multilingual-e5-small",
+      "Xenova/multilingual-e5-small",
       { dtype: "q8" },
     );
-    expect(ext1.model).toBe("intfloat/multilingual-e5-small");
+    expect(ext1.model).toBe("Xenova/multilingual-e5-small");
 
     // シングルトンキャッシュの確認
     const ext2 = await getWorkerExtractor();
