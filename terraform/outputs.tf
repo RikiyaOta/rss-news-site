@@ -1,0 +1,14 @@
+output "r2_bucket_name" {
+  description = "Cloudflare R2 data bucket name"
+  value       = cloudflare_r2_bucket.data.name
+}
+
+output "pages_project_name" {
+  description = "Cloudflare Pages project name"
+  value       = cloudflare_pages_project.site.name
+}
+
+output "pages_subdomain" {
+  description = "Cloudflare Pages subdomain URL"
+  value       = cloudflare_pages_project.site.subdomain
+}

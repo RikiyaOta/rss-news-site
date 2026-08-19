@@ -1,0 +1,12 @@
+packages:
+  - "."
+
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true

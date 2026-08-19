@@ -1,0 +1,28 @@
+# Node & Dependencies
+node_modules/
+.pnpm-store/
+
+# Build & Test outputs
+dist/
+coverage/
+playwright-report/
+test-results/
+
+# Local databases & pipeline outputs
+data/*.db
+data/*.parquet
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# OS & IDE
+.DS_Store
+*.local

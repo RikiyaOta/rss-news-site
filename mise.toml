@@ -1,0 +1,9 @@
+[settings]
+minimum_release_age = "7d"
+
+[tools]
+node = "24.19.0"
+pnpm = "11.22.0"
+terraform = "1.15.8"
+tflint = "0.55.1"
+"github:suzuki-shunsuke/pinact" = "4.0.0"
