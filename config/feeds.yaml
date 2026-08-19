@@ -12,19 +12,55 @@ feeds:
 
 profile:
   interests:
-    - "TypeScript"
-    - "React"
-    - "Cloudflare"
-    - "AI Agents"
-    - "LLM"
-    - "SQLite"
+    # システムプログラミング & バックエンド
     - "Rust"
+    - "Go"
+    - "TypeScript"
+    - "Java"
+    - "Spring Boot"
     - "WebAssembly"
+    - "型システム"
+    - "メモリ管理 / パフォーマンス最適化"
+    - "CLI / TUI"
+    - "ネットワークプログラミング"
+
+    # アーキテクチャ & インフラ & DB
     - "System Architecture"
+    - "Cloudflare"
+    - "Cloudflare Workers"
+    - "Hono"
+    - "SQLite"
+    - "Cloudflare D1"
+    - "Local-first"
+    - "分散システム"
+
+    # AI & エージェント & 検索
+    - "AI Agents"
+    - "MCP (Model Context Protocol)"
+    - "Agentic Commerce"
+    - "LLM Integration"
+    - "ベクトル検索 / Embedding"
+
+    # 数理 & 物理 & 可視化
+    - "熱力学 / 統計力学"
+    - "数値計算 / シミュレーション"
+    - "数理モデルの可視化"
+
   exclude_keywords:
     - "PR記事"
     - "スポンサード"
     - "初心者向けチュートリアル"
+    - "入門"
     - "セール情報"
     - "イベント登壇募集"
-  scoring_guidelines: "技術的深みがあり実用的で新規性がある記事、またはアーキテクチャ設計やAIエージェントの先進的な活用事例を高く評価する。"
+    - "おすすめプロンプト○選"
+    - "AIで副業"
+    - "ノーコード"
+    - "転職ポエム"
+    - "速報まとめ"
+
+  scoring_guidelines: >-
+    単なる概要まとめや表面的なやってみた記事、入門チュートリアルは低評価とする。
+    内部メカニズムの深い解説、堅牢で美しいアーキテクチャ設計、Rust/Go/Java等の型安全性や低レイヤ最適化の実践、
+    ローカルファーストやAIエージェント連携（MCP等）の先進的な設計、あるいは数理・物理シミュレーションの実装など、
+    技術的な深み・独自性・知的好奇心を刺激する手触り感のある記事を最高評価とする。

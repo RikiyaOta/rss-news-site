@@ -29,9 +29,8 @@ jobs:
       - name: 依存パッケージのインストール
         run: pnpm install --frozen-lockfile
 
-      - name: パイプライン実行 (RSS収集・要約・ベクトル化・R2アップロード)
+      - name: パイプライン実行 (RSS収集・スコアリング・ベクトル化・R2アップロード)
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}

@@ -87,12 +87,8 @@ export function extractMetaDescription(html: string): string {
 
   // 2. meta name="description" の抽出
   const metaMatch =
-    html.match(
-      /<meta\s+[^>]*?name=["']description["'][^>]*?content=["']([\s\S]*?)["'][^>]*?>/i,
-    ) ||
-    html.match(
-      /<meta\s+[^>]*?content=["']([\s\S]*?)["'][^>]*?name=["']description["'][^>]*?>/i,
-    );
+    html.match(/<meta\s+[^>]*?name=["']description["'][^>]*?content=["']([\s\S]*?)["'][^>]*?>/i) ||
+    html.match(/<meta\s+[^>]*?content=["']([\s\S]*?)["'][^>]*?name=["']description["'][^>]*?>/i);
   if (metaMatch && metaMatch[1]) {
     return cleanText(metaMatch[1]);
   }
@@ -154,4 +150,3 @@ export async function fetchFeedArticles(
     return [];
   }
 }
-

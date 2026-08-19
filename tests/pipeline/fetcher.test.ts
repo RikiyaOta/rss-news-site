@@ -395,7 +395,9 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
   describe("extractMetaDescription & fetchPageDescription", () => {
     it("og:description メタタグからコンテンツを抽出できること", () => {
       const html = `<html><head><meta property="og:description" content="This is an article about AI Agents and TypeScript."></head></html>`;
-      expect(extractMetaDescription(html)).toBe("This is an article about AI Agents and TypeScript.");
+      expect(extractMetaDescription(html)).toBe(
+        "This is an article about AI Agents and TypeScript.",
+      );
     });
 
     it("meta name='description' からコンテンツを抽出できること", () => {
@@ -443,12 +445,15 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
 
       const desc = await fetchPageDescription("https://example.com/page", mockFetch);
       expect(desc).toBe("Fetched page description.");
-      expect(mockFetch).toHaveBeenCalledWith("https://example.com/page", expect.objectContaining({
-        headers: expect.objectContaining({
-          "User-Agent": expect.any(String),
-          Accept: "text/html,application/xhtml+xml",
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://example.com/page",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "User-Agent": expect.any(String),
+            Accept: "text/html,application/xhtml+xml",
+          }),
         }),
-      }));
+      );
     });
 
     it("fetchPageDescription: HTTPステータスが200以外（非ok）の場合は空文字を返すこと", async () => {
@@ -468,4 +473,3 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
     });
   });
 });
-

@@ -50,7 +50,7 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       const score = calculateScoreFromSimilarity(0.82, false);
       expect(score).toBeGreaterThanOrEqual(65);
       expect(score).toBeLessThanOrEqual(84);
-      expect(calculateScoreFromSimilarity(0.80, false)).toBe(65);
+      expect(calculateScoreFromSimilarity(0.8, false)).toBe(65);
     });
 
     it("類似度が 0.73〜0.79 のとき、40〜64 点を返すこと", () => {
@@ -61,10 +61,10 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
     });
 
     it("類似度が 0.73 未満のとき、0〜39 点を返すこと", () => {
-      const score = calculateScoreFromSimilarity(0.60, false);
+      const score = calculateScoreFromSimilarity(0.6, false);
       expect(score).toBeLessThanOrEqual(39);
       expect(score).toBeGreaterThanOrEqual(0);
-      expect(calculateScoreFromSimilarity(0.50, false)).toBe(0);
+      expect(calculateScoreFromSimilarity(0.5, false)).toBe(0);
       expect(calculateScoreFromSimilarity(0.0, false)).toBe(0);
     });
 
