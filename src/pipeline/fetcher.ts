@@ -67,18 +67,91 @@ export function normalizeFeedItem(item: any, sourceName: string): RawArticle {
   };
 }
 
+/**
+ * HTML 文字列から og:description または meta description を抽出する
+ */
+export function extractMetaDescription(html: string): string {
+  if (!html || typeof html !== "string") return "";
+
+  // 1. og:description の抽出
+  const ogMatch =
+    html.match(
+      /<meta\s+[^>]*?(?:property|name)=["'](?:og:description|twitter:description)["'][^>]*?content=["']([\s\S]*?)["'][^>]*?>/i,
+    ) ||
+    html.match(
+      /<meta\s+[^>]*?content=["']([\s\S]*?)["'][^>]*?(?:property|name)=["'](?:og:description|twitter:description)["'][^>]*?>/i,
+    );
+  if (ogMatch && ogMatch[1]) {
+    return cleanText(ogMatch[1]);
+  }
+
+  // 2. meta name="description" の抽出
+  const metaMatch =
+    html.match(
+      /<meta\s+[^>]*?name=["']description["'][^>]*?content=["']([\s\S]*?)["'][^>]*?>/i,
+    ) ||
+    html.match(
+      /<meta\s+[^>]*?content=["']([\s\S]*?)["'][^>]*?name=["']description["'][^>]*?>/i,
+    );
+  if (metaMatch && metaMatch[1]) {
+    return cleanText(metaMatch[1]);
+  }
+
+  return "";
+}
+
+/**
+ * 指定された URL の HTML を取得し、メタディスクリプションを抽出する（タイムアウト 5 秒）
+ */
+export async function fetchPageDescription(
+  url: string,
+  customFetch: typeof fetch = fetch,
+): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    const response = await customFetch(url, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) return "";
+    const html = await response.text();
+    return extractMetaDescription(html);
+  } catch {
+    return "";
+  }
+}
+
 export async function fetchFeedArticles(
   source: FeedSource,
   parser: Parser = defaultParser,
+  customFetch?: typeof fetch,
 ): Promise<RawArticle[]> {
   try {
     const feed = await parser.parseURL(source.url);
     const items = feed?.items ?? [];
-    return items
+    const articles = items
       .map((item) => normalizeFeedItem(item, source.name))
       .filter((article) => Boolean(article.url && article.url.trim()));
+
+    // snippet が空の記事について og:description の補完を試行
+    for (const article of articles) {
+      if (!article.snippet && article.url) {
+        article.snippet = await fetchPageDescription(article.url, customFetch);
+      }
+    }
+
+    return articles;
   } catch (error) {
     console.error(`フィード取得失敗 [${source.name} - ${source.url}]:`, error);
     return [];
   }
 }
+
