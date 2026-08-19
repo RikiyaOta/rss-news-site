@@ -64,6 +64,15 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       expect(content).toMatch(/build_command\s*=\s*"pnpm build"/);
       expect(content).toMatch(/destination_dir\s*=\s*"dist"/);
     });
+    it("Cloudflare Pages カスタムドメインリソース (cloudflare_pages_domain.custom) が正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/resource\s+"cloudflare_pages_domain"\s+"custom"/);
+      expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
+      expect(content).toMatch(/project_name\s*=\s*cloudflare_pages_project\.site\.name/);
+      expect(content).toMatch(/domain\s*=\s*var\.custom_domain/);
+    });
   });
 
   describe("variables.tf の変数定義検証", () => {
@@ -104,6 +113,14 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       expect(content).toMatch(/default\s*=\s*"main"/);
     });
 
+    it("custom_domain 変数がデフォルト値 'rss-news.rikiyaota.kyoto' で定義されていること", () => {
+      const varsPath = path.join(tfDir, "variables.tf");
+      const content = fs.readFileSync(varsPath, "utf-8");
+
+      expect(content).toMatch(/variable\s+"custom_domain"/);
+      expect(content).toMatch(/default\s*=\s*"rss-news\.rikiyaota\.kyoto"/);
+    });
+
     it("r2_cors_allowed_origins 変数が 'https://rss-news.rikiyaota.kyoto' を含むリストとして定義されていること", () => {
       const varsPath = path.join(tfDir, "variables.tf");
       const content = fs.readFileSync(varsPath, "utf-8");
@@ -141,6 +158,14 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
 
       expect(content).toMatch(/output\s+"pages_subdomain"/);
       expect(content).toMatch(/value\s*=\s*cloudflare_pages_project\.site\.subdomain/);
+    });
+
+    it("custom_domain 出力が定義されていること", () => {
+      const outputsPath = path.join(tfDir, "outputs.tf");
+      const content = fs.readFileSync(outputsPath, "utf-8");
+
+      expect(content).toMatch(/output\s+"custom_domain"/);
+      expect(content).toMatch(/value\s*=\s*cloudflare_pages_domain\.custom\.domain/);
     });
   });
 });
