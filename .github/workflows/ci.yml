@@ -95,34 +95,29 @@ jobs:
           sed -n '/% Coverage report from v8/,$p' coverage_clean.txt >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: PR Conversation に Terraform Plan をコメント投稿
-        if: github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ -f terraform/plan.txt ]; then
-            PLAN_BODY=$(cat terraform/plan.txt)
-            gh pr comment "$PR_NUMBER" --body "### 🏗️ Terraform Plan レポート
-
-            \`\`\`terraform
-            $PLAN_BODY
-            \`\`\`"
-          fi
-
-      - name: PR Conversation にテストカバレッジをコメント投稿
+      - name: PR Conversation に CI レポート (Terraform Plan & テストカバレッジ) をコメント投稿
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           COVERAGE_BODY=$(sed -n '/% Coverage report from v8/,$p' coverage_clean.txt)
-          gh pr comment "$PR_NUMBER" --body "### 📊 テストカバレッジレポート
+          PLAN_SECTION=""
+          if [ -f terraform/plan.txt ]; then
+            PLAN_BODY=$(cat terraform/plan.txt)
+            PLAN_SECTION="### 🏗️ Terraform Plan レポート
 
+          \`\`\`terraform
+          $PLAN_BODY
           \`\`\`
-          $COVERAGE_BODY
-          \`\`\`" --edit-last || gh pr comment "$PR_NUMBER" --body "### 📊 テストカバレッジレポート
+
+          "
+          fi
+
+          REPORT_BODY="${PLAN_SECTION}### 📊 テストカバレッジレポート
 
           \`\`\`
           $COVERAGE_BODY
           \`\`\`"
+
+          gh pr comment "$PR_NUMBER" --body "$REPORT_BODY" --edit-last || gh pr comment "$PR_NUMBER" --body "$REPORT_BODY"
