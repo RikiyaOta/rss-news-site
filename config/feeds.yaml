@@ -1,0 +1,30 @@
+feeds:
+  - name: "Zenn AI"
+    url: "https://zenn.dev/topics/ai/feed"
+  - name: "Zenn TypeScript"
+    url: "https://zenn.dev/topics/typescript/feed"
+  - name: "Hacker News"
+    url: "https://news.ycombinator.com/rss"
+  - name: "Cloudflare Blog"
+    url: "https://blog.cloudflare.com/rss/"
+  - name: "GitHub Blog"
+    url: "https://github.blog/feed/"
+
+profile:
+  interests:
+    - "TypeScript"
+    - "React"
+    - "Cloudflare"
+    - "AI Agents"
+    - "LLM"
+    - "SQLite"
+    - "Rust"
+    - "WebAssembly"
+    - "System Architecture"
+  exclude_keywords:
+    - "PR記事"
+    - "スポンサード"
+    - "初心者向けチュートリアル"
+    - "セール情報"
+    - "イベント登壇募集"
+  scoring_guidelines: "技術的深みがあり実用的で新規性がある記事、またはアーキテクチャ設計やAIエージェントの先進的な活用事例を高く評価する。"
