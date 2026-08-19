@@ -17,3 +17,8 @@ output "custom_domain" {
   description = "Cloudflare Pages custom domain"
   value       = cloudflare_pages_domain.custom.domain
 }
+
+output "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID"
+  value       = data.cloudflare_zone.main.id
+}

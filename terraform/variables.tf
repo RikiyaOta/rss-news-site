@@ -39,3 +39,9 @@ variable "custom_domain" {
   type        = string
   default     = "rss-news.rikiyaota.kyoto"
 }
+
+variable "cloudflare_zone_name" {
+  description = "Cloudflare Zone Name"
+  type        = string
+  default     = "rikiyaota.kyoto"
+}

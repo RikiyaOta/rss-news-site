@@ -73,6 +73,26 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       expect(content).toMatch(/project_name\s*=\s*cloudflare_pages_project\.site\.name/);
       expect(content).toMatch(/domain\s*=\s*var\.custom_domain/);
     });
+
+    it("Cloudflare Zone データソース (data.cloudflare_zone.main) が正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/data\s+"cloudflare_zone"\s+"main"/);
+      expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
+      expect(content).toMatch(/name\s*=\s*var\.cloudflare_zone_name/);
+    });
+
+    it("Cloudflare DNS CNAME レコード (cloudflare_record.pages_cname) が正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/resource\s+"cloudflare_record"\s+"pages_cname"/);
+      expect(content).toMatch(/zone_id\s*=\s*data\.cloudflare_zone\.main\.id/);
+      expect(content).toMatch(/name\s*=\s*"rss-news"/);
+      expect(content).toMatch(/type\s*=\s*"CNAME"/);
+      expect(content).toMatch(/proxied\s*=\s*true/);
+    });
   });
 
   describe("variables.tf の変数定義検証", () => {
@@ -121,6 +141,14 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       expect(content).toMatch(/default\s*=\s*"rss-news\.rikiyaota\.kyoto"/);
     });
 
+    it("cloudflare_zone_name 変数がデフォルト値 'rikiyaota.kyoto' で定義されていること", () => {
+      const varsPath = path.join(tfDir, "variables.tf");
+      const content = fs.readFileSync(varsPath, "utf-8");
+
+      expect(content).toMatch(/variable\s+"cloudflare_zone_name"/);
+      expect(content).toMatch(/default\s*=\s*"rikiyaota\.kyoto"/);
+    });
+
     it("r2_cors_allowed_origins 変数が 'https://rss-news.rikiyaota.kyoto' を含むリストとして定義されていること", () => {
       const varsPath = path.join(tfDir, "variables.tf");
       const content = fs.readFileSync(varsPath, "utf-8");
@@ -166,6 +194,14 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
 
       expect(content).toMatch(/output\s+"custom_domain"/);
       expect(content).toMatch(/value\s*=\s*cloudflare_pages_domain\.custom\.domain/);
+    });
+
+    it("cloudflare_zone_id 出力が定義されていること", () => {
+      const outputsPath = path.join(tfDir, "outputs.tf");
+      const content = fs.readFileSync(outputsPath, "utf-8");
+
+      expect(content).toMatch(/output\s+"cloudflare_zone_id"/);
+      expect(content).toMatch(/value\s*=\s*data\.cloudflare_zone\.main\.id/);
     });
   });
 });

@@ -42,8 +42,22 @@ resource "cloudflare_pages_project" "site" {
   }
 }
 
+data "cloudflare_zone" "main" {
+  account_id = var.cloudflare_account_id
+  name       = var.cloudflare_zone_name
+}
+
 resource "cloudflare_pages_domain" "custom" {
   account_id   = var.cloudflare_account_id
   project_name = cloudflare_pages_project.site.name
   domain       = var.custom_domain
+}
+
+resource "cloudflare_record" "pages_cname" {
+  zone_id = data.cloudflare_zone.main.id
+  name    = "rss-news"
+  type    = "CNAME"
+  value   = "${cloudflare_pages_project.site.name}.pages.dev"
+  proxied = true
+  ttl     = 1
 }
