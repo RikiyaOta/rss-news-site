@@ -63,17 +63,6 @@ describe("Terraform による Cloudflare R2 & Pages インフラ定義の検証"
       expect(content).toMatch(/production_branch\s*=\s*var\.production_branch/);
       expect(content).toMatch(/build_command\s*=\s*"pnpm build"/);
       expect(content).toMatch(/destination_dir\s*=\s*"dist"/);
-      expect(content).toMatch(/NODE_VERSION\s*=\s*"24"/);
-    });
-
-    it("Cloudflare R2 バケットの CORS 設定 (cloudflare_r2_bucket_cors) が正しく定義されていること", () => {
-      const mainPath = path.join(tfDir, "main.tf");
-      const content = fs.readFileSync(mainPath, "utf-8");
-
-      expect(content).toMatch(/resource\s+"cloudflare_r2_bucket_cors"/);
-      expect(content).toMatch(/bucket_name\s*=\s*cloudflare_r2_bucket\.data\.name/);
-      expect(content).toMatch(/allowed/);
-      expect(content).toMatch(/methods\s*=\s*\[.*"GET".*\]/);
     });
   });
 

@@ -33,12 +33,8 @@ jobs:
         run: pnpm lint:tf
 
       - name: テスト実行とカバレッジ計測
-        run: pnpm test:coverage --reporter=json-summary --reporter=text
-
-      - name: テストカバレッジを Step Summary に出力
-        if: always()
         run: |
           echo "### 📊 テストカバレッジサマリー" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          pnpm vitest run --coverage --reporter=text-summary >> $GITHUB_STEP_SUMMARY
+          pnpm test:coverage | tee -a $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
