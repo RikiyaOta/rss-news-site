@@ -4,6 +4,8 @@ import {
   generateArticleId,
   normalizeFeedItem,
   fetchFeedArticles,
+  extractMetaDescription,
+  fetchPageDescription,
   type RawArticle,
 } from "../../src/pipeline/fetcher";
 import { FeedSource } from "../../src/shared/types";
@@ -333,6 +335,141 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
       expect(articles[0].source_name).toBe("Default Feed");
 
       parseURLSpy.mockRestore();
+    });
+
+    it("snippetが空の記事についてURLからメタディスクリプションを取得して補完すること", async () => {
+      const source: FeedSource = {
+        name: "Hacker News",
+        url: "https://news.ycombinator.com/rss",
+      };
+
+      mockParser.parseURL.mockResolvedValue({
+        items: [
+          {
+            title: "Show HN: Modern AI News Site",
+            link: "https://example.com/show-hn",
+            contentSnippet: "",
+          },
+        ],
+      });
+
+      const mockFetch: typeof fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () =>
+          '<html><head><meta property="og:description" content="An open source AI news platform built with TypeScript."></head></html>',
+      } as any);
+
+      const articles = await fetchFeedArticles(source, mockParser, mockFetch);
+
+      expect(articles).toHaveLength(1);
+      expect(articles[0].snippet).toBe("An open source AI news platform built with TypeScript.");
+      expect(mockFetch).toHaveBeenCalledWith("https://example.com/show-hn", expect.any(Object));
+    });
+
+    it("snippetが既に存在する記事については追加取得を行わないこと", async () => {
+      const source: FeedSource = {
+        name: "Tech Blog",
+        url: "https://techblog.example.com/rss",
+      };
+
+      mockParser.parseURL.mockResolvedValue({
+        items: [
+          {
+            title: "Blog Post with snippet",
+            link: "https://techblog.example.com/post-1",
+            contentSnippet: "Existing snippet content",
+          },
+        ],
+      });
+
+      const mockFetch: typeof fetch = vi.fn();
+
+      const articles = await fetchFeedArticles(source, mockParser, mockFetch);
+
+      expect(articles).toHaveLength(1);
+      expect(articles[0].snippet).toBe("Existing snippet content");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("extractMetaDescription & fetchPageDescription", () => {
+    it("og:description メタタグからコンテンツを抽出できること", () => {
+      const html = `<html><head><meta property="og:description" content="This is an article about AI Agents and TypeScript."></head></html>`;
+      expect(extractMetaDescription(html)).toBe(
+        "This is an article about AI Agents and TypeScript.",
+      );
+    });
+
+    it("meta name='description' からコンテンツを抽出できること", () => {
+      const html = `<html><head><meta name="description" content="A comprehensive guide to Cloudflare Workers."></head></html>`;
+      expect(extractMetaDescription(html)).toBe("A comprehensive guide to Cloudflare Workers.");
+    });
+
+    it("twitter:description メタタグからコンテンツを抽出できること", () => {
+      const html = `<html><head><meta name="twitter:description" content="Twitter card description content."></head></html>`;
+      expect(extractMetaDescription(html)).toBe("Twitter card description content.");
+    });
+
+    it("メタタグの属性順序が content -> property の場合でも抽出できること", () => {
+      const html = `<html><head><meta content="Content before property attribute" property="og:description"></head></html>`;
+      expect(extractMetaDescription(html)).toBe("Content before property attribute");
+    });
+
+    it("メタタグの属性順序が content -> name の場合でも抽出できること", () => {
+      const html = `<html><head><meta content="Content before name attribute" name="description"></head></html>`;
+      expect(extractMetaDescription(html)).toBe("Content before name attribute");
+    });
+
+    it("メタタグ内のHTMLエンティティや過剰な空白、タグがクリーンアップされること", () => {
+      const html = `<html><head><meta property="og:description" content="  <b>Cleaned</b>  description &amp; info  "></head></html>`;
+      expect(extractMetaDescription(html)).toBe("Cleaned description &amp; info");
+    });
+
+    it("メタタグが存在しない場合は空文字を返すこと", () => {
+      const html = `<html><head><title>No Description</title></head></html>`;
+      expect(extractMetaDescription(html)).toBe("");
+    });
+
+    it("HTMLが空文字または無効な入力の場合は空文字を返すこと", () => {
+      expect(extractMetaDescription("")).toBe("");
+      expect(extractMetaDescription(null as any)).toBe("");
+      expect(extractMetaDescription(undefined as any)).toBe("");
+    });
+
+    it("fetchPageDescription: 正常にHTMLを取得してメタディスクリプションを返却できること", async () => {
+      const mockFetch: typeof fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () =>
+          '<html><head><meta property="og:description" content="Fetched page description."></head></html>',
+      } as any);
+
+      const desc = await fetchPageDescription("https://example.com/page", mockFetch);
+      expect(desc).toBe("Fetched page description.");
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://example.com/page",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "User-Agent": expect.any(String),
+            Accept: "text/html,application/xhtml+xml",
+          }),
+        }),
+      );
+    });
+
+    it("fetchPageDescription: HTTPステータスが200以外（非ok）の場合は空文字を返すこと", async () => {
+      const mockFetch: typeof fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+      } as any);
+
+      const desc = await fetchPageDescription("https://example.com/not-found", mockFetch);
+      expect(desc).toBe("");
+    });
+
+    it("fetchPageDescription: ネットワークエラーやタイムアウト時は安全に空文字を返すこと", async () => {
+      const failingFetch: typeof fetch = vi.fn().mockRejectedValue(new Error("Network timeout"));
+      const desc = await fetchPageDescription("https://example.com/timeout", failingFetch);
+      expect(desc).toBe("");
     });
   });
 });
