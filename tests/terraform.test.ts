@@ -60,6 +60,20 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/name\s*=\s*var\.zone_name/);
     });
 
+    it("Cloudflare Workers スクリプト本体 (cloudflare_workers_script.site) と D1/AI バインディングが正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/resource\s+"cloudflare_workers_script"\s+"site"/);
+      expect(content).toMatch(/script_name\s*=\s*var\.worker_name/);
+      expect(content).toMatch(/compatibility_flags\s*=\s*\["nodejs_compat"\]/);
+      expect(content).toMatch(/name\s*=\s*"DB"/);
+      expect(content).toMatch(/type\s*=\s*"d1"/);
+      expect(content).toMatch(/name\s*=\s*"AI"/);
+      expect(content).toMatch(/type\s*=\s*"ai"/);
+      expect(content).toMatch(/ignore_changes\s*=\s*\[content,\s*assets\]/);
+    });
+
     it("Cloudflare Workers カスタムドメインリソース (cloudflare_workers_custom_domain.custom) が正しく定義されていること", () => {
       const mainPath = path.join(tfDir, "main.tf");
       const content = fs.readFileSync(mainPath, "utf-8");
@@ -67,7 +81,7 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/resource\s+"cloudflare_workers_custom_domain"\s+"custom"/);
       expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
       expect(content).toMatch(/hostname\s*=\s*var\.custom_domain/);
-      expect(content).toMatch(/service\s*=\s*var\.worker_name/);
+      expect(content).toMatch(/service\s*=\s*cloudflare_workers_script\.site\.script_name/);
       expect(content).toMatch(/zone_id\s*=\s*data\.cloudflare_zones\.primary\.result\[0\]\.id/);
     });
 
