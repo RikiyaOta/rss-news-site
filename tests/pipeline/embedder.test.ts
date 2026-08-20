@@ -10,8 +10,8 @@ import {
 } from "../../src/pipeline/embedder";
 
 const mockDefaultExtractor = vi.fn().mockResolvedValue({
-  data: new Float32Array(384).fill(0.01),
-  dims: [1, 384],
+  data: new Float32Array(1024).fill(0.01),
+  dims: [1, 1024],
 });
 
 vi.mock("@huggingface/transformers", () => {
@@ -32,7 +32,7 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
   });
 
   describe("formatPassageText", () => {
-    it("multilingual-e5-small の仕様に則り passage: プレフィックスを付与し、タイトルと要約を改行で結合すること", () => {
+    it("bge-m3 の仕様に則り passage: プレフィックスを付与し、タイトルと要約を改行で結合すること", () => {
       const title = "TypeScript 5.8 の新機能解説";
       const summary = "・パフォーマンス改善\n・型推論の強化\n・新機能の追加";
       const formatted = formatPassageText(title, summary);
@@ -82,11 +82,11 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
       expect(normalized[2]).toBeCloseTo(2 / 3, 5);
     });
 
-    it("384次元のランダムベクトルを L2 ノルム 1.0 に正規化すること", () => {
-      const randomVec = Array.from({ length: 384 }, () => Math.random() * 2 - 1);
+    it("1024次元のランダムベクトルを L2 ノルム 1.0 に正規化すること", () => {
+      const randomVec = Array.from({ length: 1024 }, () => Math.random() * 2 - 1);
       const normalized = l2Normalize(randomVec);
 
-      expect(normalized.length).toBe(384);
+      expect(normalized.length).toBe(1024);
       let sumSquares = 0;
       for (let i = 0; i < normalized.length; i++) {
         sumSquares += normalized[i] * normalized[i];
@@ -116,26 +116,24 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
   });
 
   describe("getExtractor (シングルトンおよび依存性注入)", () => {
-    it("引数なしで呼び出した場合に @huggingface/transformers の pipeline を初期化すること", async () => {
+    it("引数なしで呼び出した場合に @huggingface/transformers の pipeline で BAAI/bge-m3 を初期化すること", async () => {
       const extractor = await getExtractor();
 
-      expect(pipeline).toHaveBeenCalledWith("feature-extraction", "Xenova/multilingual-e5-small", {
+      expect(pipeline).toHaveBeenCalledWith("feature-extraction", "BAAI/bge-m3", {
         dtype: "fp32",
       });
       expect(extractor).toBe(mockDefaultExtractor);
     });
 
-    it("カスタムファクトリ関数（DI）を用いて feature-extraction pipeline が初期化されること", async () => {
+    it("カスタムファクトリ関数（DI）を用いて BAAI/bge-m3 の feature-extraction pipeline が初期化されること", async () => {
       const mockPipelineInstance = vi.fn();
       const mockPipelineFactory = vi.fn().mockResolvedValue(mockPipelineInstance);
 
       const extractor = await getExtractor(mockPipelineFactory);
 
-      expect(mockPipelineFactory).toHaveBeenCalledWith(
-        "feature-extraction",
-        "Xenova/multilingual-e5-small",
-        { dtype: "fp32" },
-      );
+      expect(mockPipelineFactory).toHaveBeenCalledWith("feature-extraction", "BAAI/bge-m3", {
+        dtype: "fp32",
+      });
       expect(extractor).toBe(mockPipelineInstance);
     });
 
@@ -178,10 +176,10 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
 
   describe("generateArticleEmbedding", () => {
     it("フォーマットされたテキストと pooling: mean, normalize: true オプションで extractor を呼び出すこと", async () => {
-      const mockEmbeddingData = new Float32Array(384).fill(0.05);
+      const mockEmbeddingData = new Float32Array(1024).fill(0.05);
       const mockExtractor = vi.fn().mockResolvedValue({
         data: mockEmbeddingData,
-        dims: [1, 384],
+        dims: [1, 1024],
       });
 
       const title = "テスト記事タイトル";
@@ -194,25 +192,25 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
         normalize: true,
       });
       expect(embedding).toBeInstanceOf(Float32Array);
-      expect(embedding.length).toBe(384);
+      expect(embedding.length).toBe(1024);
       expect(embedding[0]).toBeCloseTo(0.05, 5);
     });
 
     it("extractor が生配列（number[]）を返した場合でも Float32Array に変換されること", async () => {
-      const mockRawData = Array.from({ length: 384 }, (_, i) => i * 0.001);
+      const mockRawData = Array.from({ length: 1024 }, (_, i) => i * 0.001);
       const mockExtractor = vi.fn().mockResolvedValue(mockRawData);
 
       const embedding = await generateArticleEmbedding("タイトル", "要約", mockExtractor);
 
       expect(embedding).toBeInstanceOf(Float32Array);
-      expect(embedding.length).toBe(384);
+      expect(embedding.length).toBe(1024);
       expect(embedding[10]).toBeCloseTo(0.01, 5);
     });
 
     it("extractorInstance が省略された場合に getExtractor から取得したインスタンスを使用すること", async () => {
       const embedding = await generateArticleEmbedding("タイトル", "要約");
 
-      expect(pipeline).toHaveBeenCalledWith("feature-extraction", "Xenova/multilingual-e5-small", {
+      expect(pipeline).toHaveBeenCalledWith("feature-extraction", "BAAI/bge-m3", {
         dtype: "fp32",
       });
       expect(mockDefaultExtractor).toHaveBeenCalledWith("passage: タイトル\n要約", {
@@ -220,23 +218,23 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
         normalize: true,
       });
       expect(embedding).toBeInstanceOf(Float32Array);
-      expect(embedding.length).toBe(384);
+      expect(embedding.length).toBe(1024);
       expect(embedding[0]).toBeCloseTo(0.01, 5);
     });
 
-    it("384次元の埋め込みベクトルが返却されることの検証", async () => {
-      const dummy384 = new Float32Array(384);
-      for (let i = 0; i < 384; i++) {
-        dummy384[i] = Math.sin(i);
+    it("1024次元の埋め込みベクトルが返却されることの検証", async () => {
+      const dummy1024 = new Float32Array(1024);
+      for (let i = 0; i < 1024; i++) {
+        dummy1024[i] = Math.sin(i);
       }
-      const mockExtractor = vi.fn().mockResolvedValue({ data: dummy384 });
+      const mockExtractor = vi.fn().mockResolvedValue({ data: dummy1024 });
 
       const result = await generateArticleEmbedding("記事タイトル", "記事要約", mockExtractor);
 
-      expect(result.length).toBe(384);
+      expect(result.length).toBe(1024);
       expect(result).toBeInstanceOf(Float32Array);
-      expect(result[0]).toBe(dummy384[0]);
-      expect(result[100]).toBe(dummy384[100]);
+      expect(result[0]).toBe(dummy1024[0]);
+      expect(result[100]).toBe(dummy1024[100]);
     });
   });
 });
