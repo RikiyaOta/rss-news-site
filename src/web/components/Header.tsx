@@ -32,11 +32,11 @@ export function Header({
               <span>AI RSS News Dashboard</span>
               <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
                 <Sparkles className="w-2.5 h-2.5" />
-                Multilingual E5
+                Workers AI &amp; BGE-M3
               </span>
             </h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              毎日自動収集・ローカルベクトルスコアリング &amp; 横断検索
+              Cloudflare Workers &amp; D1 による高速配信 &amp; セマンティック検索
             </p>
           </div>
         </div>

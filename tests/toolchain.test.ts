@@ -47,7 +47,7 @@ describe("ツールチェーンおよびワークスペース初期設定の検�
     expect(deps["@huggingface/transformers"]).toBeDefined();
     expect(deps["better-sqlite3"]).toBeDefined();
     expect(deps["react"]).toBeDefined();
-    expect(deps["sql.js"]).toBeDefined();
+    expect(deps["hono"]).toBeDefined();
 
     // 開発依存関係検証
     const devDeps = pkg.devDependencies;

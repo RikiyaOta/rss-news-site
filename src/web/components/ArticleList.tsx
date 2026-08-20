@@ -1,6 +1,7 @@
+import { useEffect, useRef } from "react";
 import { Article, SearchResultItem } from "../../shared/types";
 import { ArticleCard } from "./ArticleCard";
-import { AlertCircle, RotateCcw, Inbox, Loader2 } from "lucide-react";
+import { AlertCircle, RotateCcw, Inbox, Loader2, ChevronDown } from "lucide-react";
 
 export interface ArticleListProps {
   articles: (Article | SearchResultItem)[];
@@ -8,6 +9,9 @@ export interface ArticleListProps {
   error: string | null;
   emptyMessage?: string;
   onRetry?: () => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 export function ArticleList({
@@ -16,8 +20,37 @@ export function ArticleList({
   error,
   emptyMessage = "記事が見つかりませんでした",
   onRetry,
+  hasMore = false,
+  isLoadingMore = false,
+  onLoadMore,
 }: ArticleListProps) {
-  // ローディング状態（スケルトン表示）
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  // IntersectionObserver による無限スクロール監視
+  useEffect(() => {
+    if (!hasMore || isLoadingMore || !onLoadMore) return;
+
+    if (typeof IntersectionObserver === "undefined") return;
+
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          onLoadMore();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+
+    observer.observe(sentinel);
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasMore, isLoadingMore, onLoadMore]);
+
+  // ローディング状態（初回ロード）
   if (isLoading) {
     return (
       <div data-testid="article-list-loading" className="w-full">
@@ -39,7 +72,6 @@ export function ArticleList({
               <div className="space-y-2 pt-2">
                 <div className="h-4 bg-zinc-100 dark:bg-zinc-800/60 rounded w-full" />
                 <div className="h-4 bg-zinc-100 dark:bg-zinc-800/60 rounded w-5/6" />
-                <div className="h-4 bg-zinc-100 dark:bg-zinc-800/60 rounded w-4/6" />
               </div>
               <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 flex justify-between">
                 <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-28" />
@@ -104,6 +136,31 @@ export function ArticleList({
           />
         ))}
       </div>
+
+      {/* 無限スクロール & 追加読み込み UI */}
+      {hasMore && onLoadMore && (
+        <div className="pt-6 pb-2 text-center">
+          <div ref={sentinelRef} className="h-2" />
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 shadow-sm transition-colors disabled:opacity-50"
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                <span>追加の記事を読み込み中...</span>
+              </>
+            ) : (
+              <>
+                <ChevronDown className="w-4 h-4 text-zinc-500" />
+                <span>さらに読み込む</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
