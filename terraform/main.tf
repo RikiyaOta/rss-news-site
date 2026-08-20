@@ -24,6 +24,10 @@ locals {
 resource "cloudflare_d1_database" "news_db" {
   account_id = var.cloudflare_account_id
   name       = var.d1_database_name
+
+  read_replication = {
+    mode = "disabled"
+  }
 }
 
 resource "cloudflare_workers_script" "site" {

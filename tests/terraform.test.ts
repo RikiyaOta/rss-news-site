@@ -50,6 +50,7 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/resource\s+"cloudflare_d1_database"\s+"news_db"/);
       expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
       expect(content).toMatch(/name\s*=\s*var\.d1_database_name/);
+      expect(content).toMatch(/read_replication\s*=\s*\{\s*mode\s*=\s*"disabled"\s*\}/);
     });
 
     it("Cloudflare Zones データソース (data.cloudflare_zones.primary) が正しく定義されていること", () => {
