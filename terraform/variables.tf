@@ -16,6 +16,12 @@ variable "zone_name" {
   default     = "rikiyaota.kyoto"
 }
 
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID (optional fallback)"
+  type        = string
+  default     = null
+}
+
 variable "d1_database_name" {
   description = "Cloudflare D1 database name"
   type        = string
