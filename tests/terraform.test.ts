@@ -52,6 +52,14 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/name\s*=\s*var\.d1_database_name/);
     });
 
+    it("Cloudflare Zones データソース (data.cloudflare_zones.primary) が正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/data\s+"cloudflare_zones"\s+"primary"/);
+      expect(content).toMatch(/name\s*=\s*var\.zone_name/);
+    });
+
     it("Cloudflare Workers カスタムドメインリソース (cloudflare_workers_custom_domain.custom) が正しく定義されていること", () => {
       const mainPath = path.join(tfDir, "main.tf");
       const content = fs.readFileSync(mainPath, "utf-8");
@@ -60,6 +68,7 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
       expect(content).toMatch(/hostname\s*=\s*var\.custom_domain/);
       expect(content).toMatch(/service\s*=\s*var\.worker_name/);
+      expect(content).toMatch(/zone_id\s*=\s*data\.cloudflare_zones\.primary\.result\[0\]\.id/);
     });
 
     it("不要になった Cloudflare R2 バケットおよび関連リソースが定義されていないこと", () => {
@@ -92,6 +101,14 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
 
       expect(content).toMatch(/variable\s+"cloudflare_account_id"/);
       expect(content).toMatch(/type\s*=\s*string/);
+    });
+
+    it("zone_name 変数がデフォルト値 'rikiyaota.kyoto' で定義されていること", () => {
+      const varsPath = path.join(tfDir, "variables.tf");
+      const content = fs.readFileSync(varsPath, "utf-8");
+
+      expect(content).toMatch(/variable\s+"zone_name"/);
+      expect(content).toMatch(/default\s*=\s*"rikiyaota\.kyoto"/);
     });
 
     it("d1_database_name 変数がデフォルト値 'rss-news-db' で定義されていること", () => {
