@@ -33,15 +33,15 @@ export function l2Normalize(vector: Float32Array | number[]): Float32Array {
  */
 export async function getExtractor(customPipeline?: any): Promise<any> {
   if (customPipeline) {
-    extractorInstance = await customPipeline("feature-extraction", "BAAI/bge-m3", {
-      dtype: "fp32",
+    extractorInstance = await customPipeline("feature-extraction", "Xenova/bge-m3", {
+      dtype: "fp16",
     });
     return extractorInstance;
   }
 
   if (!extractorInstance) {
-    extractorInstance = await pipeline("feature-extraction", "BAAI/bge-m3", {
-      dtype: "fp32",
+    extractorInstance = await pipeline("feature-extraction", "Xenova/bge-m3", {
+      dtype: "fp16",
     });
   }
 

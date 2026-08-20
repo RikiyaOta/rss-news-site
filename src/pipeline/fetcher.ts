@@ -13,7 +13,9 @@ export interface RawArticle {
 
 const defaultParser = new Parser({
   headers: {
-    "User-Agent": "rss-news-site-bot/1.0 (+https://github.com/RikiyaOta/rss-news-site)",
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
   },
   timeout: 10000,
 });
@@ -111,7 +113,7 @@ export async function fetchPageDescription(
       signal: controller.signal,
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml",
       },
     });
@@ -132,7 +134,9 @@ export async function fetchFeedArticles(
 ): Promise<RawArticle[]> {
   try {
     const feed = await parser.parseURL(source.url);
-    const items = feed?.items ?? [];
+    const rawItems = feed?.items ?? [];
+    // 1フィードあたり最新30件に制限
+    const items = rawItems.slice(0, 30);
     const articles = items
       .map((item) => normalizeFeedItem(item, source.name))
       .filter((article) => Boolean(article.url && article.url.trim()));
