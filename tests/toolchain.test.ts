@@ -43,7 +43,7 @@ describe("ツールチェーンおよびワークスペース初期設定の検�
 
     // 依存関係検証
     const deps = pkg.dependencies;
-    expect(deps["@aws-sdk/client-s3"]).toBeDefined();
+    expect(deps["@aws-sdk/client-s3"]).toBeUndefined();
     expect(deps["@huggingface/transformers"]).toBeDefined();
     expect(deps["better-sqlite3"]).toBeDefined();
     expect(deps["react"]).toBeDefined();

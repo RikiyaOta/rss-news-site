@@ -1,29 +1,25 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Article } from "../shared/types";
 import { loadConfig } from "./config";
 import { fetchFeedArticles, RawArticle } from "./fetcher";
 import { scoreArticleWithProfile, precomputeInterestVectors } from "./scorer";
-import {
-  initDailyDatabase,
-  initSearchIndexDatabase,
-  getExistingArticleIds,
-  getExistingSearchIndexIds,
-  insertArticles,
-  insertVectors,
-  SearchVectorRecord,
-} from "./db";
-import { uploadFileToR2, downloadFileFromR2 } from "./storage";
+import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
+import { syncArticlesToD1, D1SyncResult } from "./d1-sync";
+import { initLocalDatabase, upsertArticlesLocal } from "./db";
 
 export interface PipelineOptions {
   dateStr?: string;
   configPath?: string;
   outputDir?: string;
-  skipR2?: boolean;
+  localDbPath?: string;
+  skipD1Sync?: boolean;
   extractorInstance?: any;
-  s3Client?: any;
   parser?: any;
+  customFetch?: typeof fetch;
+  accountId?: string;
+  databaseId?: string;
+  apiToken?: string;
 }
 
 export interface PipelineResult {
@@ -31,133 +27,129 @@ export interface PipelineResult {
   processedCount: number;
   skippedCount: number;
   totalFetched: number;
-  dailyDbPath: string;
-  searchDbPath: string;
-  articles: Article[];
+  articles: ArticleInput[];
+  d1SyncResult?: D1SyncResult;
+  localDbPath?: string;
 }
 
 /**
- * RSS記事収集・ローカル埋め込みスコアリング・ベクトル化・SQLite保存・R2同期を行う統合パイプライン
+ * RSS記事収集・ローカル埋め込みスコアリング・ベクトル化・Cloudflare D1 同期を行う統合パイプライン
  */
 export async function runPipeline(options: PipelineOptions = {}): Promise<PipelineResult> {
   const dateStr = options.dateStr || new Date().toISOString().slice(0, 10);
   const configPath = options.configPath || "config/feeds.yaml";
   const outputDir = options.outputDir || "./data";
-  const skipR2 = options.skipR2 ?? false;
+  const skipD1Sync = options.skipD1Sync ?? false;
   const extractorInstance = options.extractorInstance;
-  const s3Client = options.s3Client;
   const parser = options.parser;
+  const customFetch = options.customFetch;
 
   const resolvedOutputDir = path.resolve(outputDir);
   fs.mkdirSync(resolvedOutputDir, { recursive: true });
 
-  const dailyDbPath = path.join(resolvedOutputDir, `${dateStr}.db`);
-  const searchDbPath = path.join(resolvedOutputDir, "search_index.db");
+  const localDbPath = options.localDbPath || path.join(resolvedOutputDir, "local_articles.db");
 
-  // Step 1 (DB同期): R2から既存の data/YYYY-MM-DD.db と search_index.db を同期
-  if (!skipR2) {
-    console.log(`[1/4] R2 から既存DBを同期中... (${dateStr})`);
-    await downloadFileFromR2(`data/${dateStr}.db`, dailyDbPath, s3Client).catch(() => false);
-    await downloadFileFromR2("search_index.db", searchDbPath, s3Client).catch(() => false);
+  // Step 1: 設定読み込み & RSS 巡回
+  console.log(`[1/3] RSSフィードを巡回中... (${configPath})`);
+  const config = loadConfig(configPath);
+  const allArticles: RawArticle[] = [];
+
+  for (const feed of config.feeds) {
+    const items = await fetchFeedArticles(feed, parser);
+    allArticles.push(...items);
   }
 
-  // Step 2: DB初期化、設定読み込み、RSS巡回、差分抽出
-  const dailyDb = initDailyDatabase(dailyDbPath);
-  const searchDb = initSearchIndexDatabase(searchDbPath);
-
-  let processedArticles: Article[] = [];
+  const totalFetched = allArticles.length;
+  const seenIds = new Set<string>();
+  const seenUrls = new Set<string>();
+  const targetArticles: RawArticle[] = [];
   let skippedCount = 0;
-  let totalFetched = 0;
 
-  try {
-    const existingDailyIds = getExistingArticleIds(dailyDb);
-    const existingSearchIndexIds = getExistingSearchIndexIds(searchDb);
-
-    console.log(`[2/4] RSSフィードを巡回中... (${configPath})`);
-    const config = loadConfig(configPath);
-    const allArticles: RawArticle[] = [];
-
-    for (const feed of config.feeds) {
-      const items = await fetchFeedArticles(feed, parser);
-      allArticles.push(...items);
+  for (const raw of allArticles) {
+    if (seenIds.has(raw.id) || seenUrls.has(raw.url)) {
+      skippedCount++;
+    } else {
+      seenIds.add(raw.id);
+      seenUrls.add(raw.url);
+      targetArticles.push(raw);
     }
+  }
 
-    totalFetched = allArticles.length;
-    const seenIds = new Set<string>([...existingDailyIds, ...existingSearchIndexIds]);
-    const targetArticles: RawArticle[] = [];
+  console.log(
+    `処理対象記事数: ${targetArticles.length} 件 (巡回総数: ${totalFetched} 件, スキップ: ${skippedCount} 件)`,
+  );
 
-    for (const raw of allArticles) {
-      if (seenIds.has(raw.id)) {
-        skippedCount++;
-      } else {
-        seenIds.add(raw.id);
-        targetArticles.push(raw);
-      }
-    }
+  const processedArticles: ArticleInput[] = [];
 
-    console.log(
-      `処理対象記事数: ${targetArticles.length} 件 (巡回総数: ${totalFetched} 件, スキップ: ${skippedCount} 件)`,
+  // Step 2: 多言語埋め込みスコアリング (BGE-M3 1024次元)
+  if (targetArticles.length > 0) {
+    console.log(`[2/3] ユーザー関心ベクトルの事前計算中...`);
+    const interestVectors = await precomputeInterestVectors(
+      config.profile.interests,
+      extractorInstance,
     );
 
-    // Step 3 (ローカル埋め込みスコアリング & ベクトル化)
-    const vectorRecords: SearchVectorRecord[] = [];
+    for (let i = 0; i < targetArticles.length; i++) {
+      const raw = targetArticles[i];
+      console.log(
+        `[2/3] スコアリング & ベクトル生成中 (${i + 1}/${targetArticles.length}): ${raw.title}`,
+      );
 
-    if (targetArticles.length > 0) {
-      console.log(`[3/4] ユーザー関心ベクトルの事前計算中...`);
-      const interestVectors = await precomputeInterestVectors(
-        config.profile.interests,
+      const { score, articleVector } = await scoreArticleWithProfile(
+        raw.title,
+        raw.snippet,
+        config.profile,
+        interestVectors,
         extractorInstance,
       );
 
-      for (let i = 0; i < targetArticles.length; i++) {
-        const raw = targetArticles[i];
-        console.log(
-          `[3/4] スコアリング & ベクトル生成中 (${i + 1}/${targetArticles.length}): ${raw.title}`,
-        );
+      const publishedDateJst = computePublishedDateJst(raw.published_at);
 
-        const { score, articleVector } = await scoreArticleWithProfile(
-          raw.title,
-          raw.snippet,
-          config.profile,
-          interestVectors,
-          extractorInstance,
-        );
+      const article: ArticleInput = {
+        id: raw.id,
+        title: raw.title,
+        url: raw.url,
+        source_name: raw.source_name,
+        summary: raw.snippet,
+        score,
+        published_at: raw.published_at,
+        published_date_jst: publishedDateJst,
+        embedding: articleVector,
+      };
 
-        const article: Article = {
-          id: raw.id,
-          title: raw.title,
-          url: raw.url,
-          source_name: raw.source_name,
-          summary: raw.snippet,
-          score,
-          published_at: raw.published_at,
-        };
-        processedArticles.push(article);
-
-        vectorRecords.push({
-          article_id: article.id,
-          date: dateStr,
-          embedding: articleVector,
-        });
-      }
+      processedArticles.push(article);
     }
-
-    // Step 4 (DB保存)
-    if (processedArticles.length > 0) {
-      insertArticles(dailyDb, processedArticles);
-      insertVectors(searchDb, vectorRecords);
-    }
-  } finally {
-    // クリーンアップ: DB接続を確実にクローズ
-    dailyDb.close();
-    searchDb.close();
   }
 
-  // Step 4 (R2アップロード)
-  if (!skipR2) {
-    console.log(`[4/4] R2 へ更新DBをアップロード中...`);
-    await uploadFileToR2(dailyDbPath, `data/${dateStr}.db`, s3Client);
-    await uploadFileToR2(searchDbPath, "search_index.db", s3Client);
+  // Step 3: ローカル SQLite DB への保存 & Cloudflare D1 への同期
+  if (processedArticles.length > 0) {
+    if (localDbPath) {
+      console.log(`[3/3] ローカル SQLite データベースを更新中... (${localDbPath})`);
+      const localDb = initLocalDatabase(localDbPath);
+      try {
+        upsertArticlesLocal(localDb, processedArticles);
+      } finally {
+        localDb.close();
+      }
+    }
+  }
+
+  let d1SyncResult: D1SyncResult | undefined;
+
+  const accountId =
+    options.accountId || process.env.CLOUDFLARE_ACCOUNT_ID || process.env.R2_ACCOUNT_ID;
+  const databaseId = options.databaseId || process.env.CLOUDFLARE_D1_DATABASE_ID;
+  const apiToken = options.apiToken || process.env.CLOUDFLARE_API_TOKEN;
+
+  if (!skipD1Sync && accountId && databaseId && apiToken && processedArticles.length > 0) {
+    console.log(`[3/3] Cloudflare D1 (${databaseId}) へ記事を同期中...`);
+    d1SyncResult = await syncArticlesToD1({
+      accountId,
+      databaseId,
+      apiToken,
+      articles: processedArticles,
+      customFetch,
+    });
   }
 
   console.log(
@@ -169,9 +161,9 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     processedCount: processedArticles.length,
     skippedCount,
     totalFetched,
-    dailyDbPath,
-    searchDbPath,
     articles: processedArticles,
+    d1SyncResult,
+    localDbPath,
   };
 }
 

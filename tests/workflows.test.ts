@@ -152,9 +152,11 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
 
       expect(content).toContain("pnpm pipeline");
       expect(content).not.toContain("GEMINI_API_KEY");
-      expect(content).toContain("R2_ACCOUNT_ID");
-      expect(content).toContain("R2_ACCESS_KEY_ID");
-      expect(content).toContain("R2_SECRET_ACCESS_KEY");
+      expect(content).toContain("CLOUDFLARE_API_TOKEN");
+      expect(content).toContain("CLOUDFLARE_ACCOUNT_ID");
+      expect(content).toContain("CLOUDFLARE_D1_DATABASE_ID");
+      expect(content).not.toContain("R2_ACCESS_KEY_ID");
+      expect(content).not.toContain("R2_SECRET_ACCESS_KEY");
     });
   });
 
