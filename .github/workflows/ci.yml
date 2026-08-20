@@ -87,8 +87,7 @@ jobs:
 
       - name: テスト実行とカバレッジ計測
         run: |
-          pnpm test:coverage > coverage_raw.txt 2>&1
-          cat coverage_raw.txt
+          pnpm test:coverage 2>&1 | tee coverage_raw.txt
           sed -e 's/\x1b\[[0-9;]*m//g' coverage_raw.txt > coverage_clean.txt
           echo "### 📊 テストカバレッジサマリー" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
