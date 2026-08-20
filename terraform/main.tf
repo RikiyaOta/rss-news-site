@@ -16,6 +16,11 @@ data "cloudflare_zones" "primary" {
   name = var.zone_name
 }
 
+locals {
+  matched_zones = try(data.cloudflare_zones.primary.result, [])
+  zone_id       = length(local.matched_zones) > 0 ? local.matched_zones[0].id : var.cloudflare_zone_id
+}
+
 resource "cloudflare_d1_database" "news_db" {
   account_id = var.cloudflare_account_id
   name       = var.d1_database_name
@@ -46,8 +51,9 @@ resource "cloudflare_workers_script" "site" {
 }
 
 resource "cloudflare_workers_custom_domain" "custom" {
+  count      = local.zone_id != null ? 1 : 0
   account_id = var.cloudflare_account_id
   hostname   = var.custom_domain
   service    = cloudflare_workers_script.site.script_name
-  zone_id    = data.cloudflare_zones.primary.result[0].id
+  zone_id    = local.zone_id
 }

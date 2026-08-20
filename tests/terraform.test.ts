@@ -82,7 +82,7 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
       expect(content).toMatch(/hostname\s*=\s*var\.custom_domain/);
       expect(content).toMatch(/service\s*=\s*cloudflare_workers_script\.site\.script_name/);
-      expect(content).toMatch(/zone_id\s*=\s*data\.cloudflare_zones\.primary\.result\[0\]\.id/);
+      expect(content).toMatch(/zone_id\s*=\s*local\.zone_id/);
     });
 
     it("不要になった Cloudflare R2 バケットおよび関連リソースが定義されていないこと", () => {
