@@ -12,68 +12,42 @@ provider "cloudflare" {
   api_token = var.cloudflare_api_token
 }
 
-resource "cloudflare_r2_bucket" "data" {
+data "cloudflare_zones" "primary" {
+  name = var.zone_name
+}
+
+resource "cloudflare_d1_database" "news_db" {
   account_id = var.cloudflare_account_id
-  name       = var.r2_data_bucket_name
-  location   = "APAC"
+  name       = var.d1_database_name
 }
 
-resource "cloudflare_r2_managed_domain" "data" {
-  account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.data.name
-  enabled     = true
-}
+resource "cloudflare_workers_script" "site" {
+  account_id          = var.cloudflare_account_id
+  script_name         = var.worker_name
+  content             = "export default { fetch() { return new Response('ok'); } };"
+  compatibility_date  = "2026-08-20"
+  compatibility_flags = ["nodejs_compat"]
 
-resource "cloudflare_r2_bucket_cors" "data" {
-  account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.data.name
-
-  rules = [
+  bindings = [
     {
-      id = "Allow Web Access"
-      allowed = {
-        methods = ["GET", "HEAD"]
-        origins = var.r2_cors_allowed_origins
-        headers = ["*"]
-      }
-      expose_headers  = ["Content-Type", "Content-Length", "ETag"]
-      max_age_seconds = 86400
+      name = "DB"
+      type = "d1"
+      id   = cloudflare_d1_database.news_db.id
+    },
+    {
+      name = "AI"
+      type = "ai"
     }
   ]
-}
 
-resource "cloudflare_pages_project" "site" {
-  account_id        = var.cloudflare_account_id
-  name              = var.pages_project_name
-  production_branch = var.production_branch
-
-  build_config = {
-    build_command   = "pnpm build"
-    destination_dir = "dist"
-  }
-
-  deployment_configs = {
-    production = {
-      env_vars = {
-        NODE_VERSION = {
-          type  = "plain_text"
-          value = "24"
-        }
-      }
-    }
-    preview = {
-      env_vars = {
-        NODE_VERSION = {
-          type  = "plain_text"
-          value = "24"
-        }
-      }
-    }
+  lifecycle {
+    ignore_changes = [content, assets]
   }
 }
 
-resource "cloudflare_pages_domain" "custom" {
-  account_id   = var.cloudflare_account_id
-  project_name = cloudflare_pages_project.site.name
-  name         = var.custom_domain
+resource "cloudflare_workers_custom_domain" "custom" {
+  account_id = var.cloudflare_account_id
+  hostname   = var.custom_domain
+  service    = cloudflare_workers_script.site.script_name
+  zone_id    = data.cloudflare_zones.primary.result[0].id
 }

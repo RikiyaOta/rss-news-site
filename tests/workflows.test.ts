@@ -152,9 +152,11 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
 
       expect(content).toContain("pnpm pipeline");
       expect(content).not.toContain("GEMINI_API_KEY");
-      expect(content).toContain("R2_ACCOUNT_ID");
-      expect(content).toContain("R2_ACCESS_KEY_ID");
-      expect(content).toContain("R2_SECRET_ACCESS_KEY");
+      expect(content).toContain("CLOUDFLARE_API_TOKEN");
+      expect(content).toContain("CLOUDFLARE_ACCOUNT_ID");
+      expect(content).toContain("CLOUDFLARE_D1_DATABASE_ID");
+      expect(content).not.toContain("R2_ACCESS_KEY_ID");
+      expect(content).not.toContain("R2_SECRET_ACCESS_KEY");
     });
   });
 
@@ -171,12 +173,12 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       }
     });
 
-    it("pnpm build および Terraform によるデプロイ手順が含まれていること", () => {
+    it("pnpm build および Terraform / wrangler deploy によるデプロイ手順が含まれていること", () => {
       const filePath = path.join(workflowsDir, "deploy.yml");
       const content = fs.readFileSync(filePath, "utf-8");
 
       expect(content).toContain("pnpm build");
-      expect(content).toContain("VITE_R2_PUBLIC_URL");
+      expect(content).toContain("wrangler deploy");
       expect(content).toMatch(/terraform\s+init/);
       expect(content).toMatch(/terraform\s+apply/);
     });

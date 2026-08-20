@@ -87,7 +87,7 @@ export function SearchBar({
       {isLoading && (
         <div className="mt-2 text-center text-xs text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1.5 animate-pulse">
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          <span>Multilingual E5 によるクエリのベクトル化中...</span>
+          <span>Workers AI (BGE-M3) によるベクトル検索中...</span>
         </div>
       )}
     </div>

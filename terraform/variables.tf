@@ -10,32 +10,26 @@ variable "cloudflare_api_token" {
   default     = null
 }
 
-variable "r2_data_bucket_name" {
-  description = "Name of the Cloudflare R2 bucket for RSS news data"
+variable "zone_name" {
+  description = "Apex domain zone name"
   type        = string
-  default     = "rss-news-site-data"
+  default     = "rikiyaota.kyoto"
 }
 
-variable "pages_project_name" {
-  description = "Name of the Cloudflare Pages project"
+variable "d1_database_name" {
+  description = "Cloudflare D1 database name"
+  type        = string
+  default     = "rss-news-db"
+}
+
+variable "worker_name" {
+  description = "Cloudflare Worker service name"
   type        = string
   default     = "rss-news-site"
 }
 
-variable "production_branch" {
-  description = "Production branch for Cloudflare Pages"
-  type        = string
-  default     = "main"
-}
-
-variable "r2_cors_allowed_origins" {
-  description = "Allowed origins for Cloudflare R2 CORS"
-  type        = list(string)
-  default     = ["https://rss-news.rikiyaota.kyoto", "http://localhost:5173"]
-}
-
 variable "custom_domain" {
-  description = "Custom domain for Cloudflare Pages"
+  description = "Custom domain for Cloudflare Worker"
   type        = string
   default     = "rss-news.rikiyaota.kyoto"
 }

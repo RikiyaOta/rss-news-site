@@ -2,14 +2,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { App } from "../../src/web/App";
-import * as sqliteClient from "../../src/web/lib/sqlite-client";
-import * as browserEmbedder from "../../src/web/lib/browser-embedder";
-import * as r2Client from "../../src/web/lib/r2-client";
+import * as apiClient from "../../src/web/lib/api-client";
 import { Article, SearchResultItem } from "../../src/shared/types";
 
-vi.mock("../../src/web/lib/sqlite-client");
-vi.mock("../../src/web/lib/browser-embedder");
-vi.mock("../../src/web/lib/r2-client");
+vi.mock("../../src/web/lib/api-client");
 
 describe("フロントエンド App コンポーネントのテスト", () => {
   const mockDailyArticles: Article[] = [
@@ -36,10 +32,10 @@ describe("フロントエンド App コンポーネントのテスト", () => {
   const mockSearchResults: SearchResultItem[] = [
     {
       id: "art-search-1",
-      title: "Intfloat multilingual-e5-small のブラウザ内推論検証",
+      title: "Workers AI と BGE-M3 による高速推論検証",
       url: "https://example.com/search-1",
       source_name: "AI Lab",
-      summary: "・ブラウザ内でのONNX推論\n・Web Workerでの非同期実行\n・高速なベクトル類似度計算",
+      summary: "・Workers AI での推論\n・高速な多言語ベクトル類似度検索",
       score: 88,
       published_at: "2026-08-18T12:00:00.000Z",
       date: "2026-08-18",
@@ -49,19 +45,20 @@ describe("フロントエンド App コンポーネントのテスト", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(r2Client.getR2PublicBaseUrl).mockReturnValue("https://pub-r2.example.com");
-    vi.mocked(sqliteClient.fetchDailyArticles).mockResolvedValue(mockDailyArticles);
-    vi.mocked(browserEmbedder.embedQuery).mockResolvedValue(new Float32Array(384));
-    vi.mocked(sqliteClient.searchArticlesByVector).mockResolvedValue(mockSearchResults);
+    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValue(mockDailyArticles);
+    vi.mocked(apiClient.searchArticles).mockResolvedValue(mockSearchResults);
   });
 
-  it("初期レンダリング時に当日付の記事一覧が取得され表示されること", async () => {
+  it("初期レンダリング時に当日付の記事一覧が API 経由で取得され表示されること", async () => {
     render(<App initialDate="2026-08-19" />);
 
     await waitFor(() => {
-      expect(sqliteClient.fetchDailyArticles).toHaveBeenCalledWith(
-        "https://pub-r2.example.com",
+      expect(apiClient.fetchDailyArticles).toHaveBeenCalledWith(
         "2026-08-19",
+        expect.objectContaining({
+          limit: 30,
+          offset: 0,
+        }),
       );
     });
 
@@ -79,9 +76,12 @@ describe("フロントエンド App コンポーネントのテスト", () => {
     fireEvent.click(prevButton);
 
     await waitFor(() => {
-      expect(sqliteClient.fetchDailyArticles).toHaveBeenCalledWith(
-        "https://pub-r2.example.com",
+      expect(apiClient.fetchDailyArticles).toHaveBeenCalledWith(
         "2026-08-18",
+        expect.objectContaining({
+          limit: 30,
+          offset: 0,
+        }),
       );
     });
   });
@@ -95,14 +95,17 @@ describe("フロントエンド App コンポーネントのテスト", () => {
     fireEvent.change(dateInput, { target: { value: "2026-08-15" } });
 
     await waitFor(() => {
-      expect(sqliteClient.fetchDailyArticles).toHaveBeenCalledWith(
-        "https://pub-r2.example.com",
+      expect(apiClient.fetchDailyArticles).toHaveBeenCalledWith(
         "2026-08-15",
+        expect.objectContaining({
+          limit: 30,
+          offset: 0,
+        }),
       );
     });
   });
 
-  it("検索キーワードを入力して検索を実行すると、ベクトル化と類似度検索が行われ結果が表示されること", async () => {
+  it("検索キーワードを入力して検索を実行すると、API 経由で検索結果が取得され表示されること", async () => {
     render(<App initialDate="2026-08-19" />);
 
     await screen.findByText("本日のおすすめAIニュース");
@@ -111,19 +114,19 @@ describe("フロントエンド App コンポーネントのテスト", () => {
     fireEvent.click(searchModeBtn);
 
     const searchInput = screen.getByPlaceholderText(/検索/);
-    fireEvent.change(searchInput, { target: { value: "multilingual-e5" } });
+    fireEvent.change(searchInput, { target: { value: "bge-m3" } });
 
     const searchBtn = screen.getByRole("button", { name: /^検索$/ });
     fireEvent.click(searchBtn);
 
     await waitFor(() => {
-      expect(browserEmbedder.embedQuery).toHaveBeenCalledWith("multilingual-e5");
-      expect(sqliteClient.searchArticlesByVector).toHaveBeenCalled();
+      expect(apiClient.searchArticles).toHaveBeenCalledWith(
+        "bge-m3",
+        expect.objectContaining({ limit: 30 }),
+      );
     });
 
-    expect(
-      await screen.findByText("Intfloat multilingual-e5-small のブラウザ内推論検証"),
-    ).toBeDefined();
+    expect(await screen.findByText("Workers AI と BGE-M3 による高速推論検証")).toBeDefined();
     expect(screen.getByText(/94%/)).toBeDefined();
   });
 
@@ -136,12 +139,10 @@ describe("フロントエンド App コンポーネントのテスト", () => {
     fireEvent.click(searchModeBtn);
 
     const searchInput = screen.getByPlaceholderText(/検索/);
-    fireEvent.change(searchInput, { target: { value: "multilingual-e5" } });
+    fireEvent.change(searchInput, { target: { value: "bge-m3" } });
     fireEvent.click(screen.getByRole("button", { name: /^検索$/ }));
 
-    expect(
-      await screen.findByText("Intfloat multilingual-e5-small のブラウザ内推論検証"),
-    ).toBeDefined();
+    expect(await screen.findByText("Workers AI と BGE-M3 による高速推論検証")).toBeDefined();
 
     const clearBtn = screen.getByRole("button", { name: /クリア/i });
     fireEvent.click(clearBtn);
@@ -150,7 +151,7 @@ describe("フロントエンド App コンポーネントのテスト", () => {
   });
 
   it("該当日の記事が0件の場合に空状態メッセージが表示されること", async () => {
-    vi.mocked(sqliteClient.fetchDailyArticles).mockResolvedValueOnce([]);
+    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValueOnce([]);
 
     render(<App initialDate="2026-08-19" />);
 
@@ -158,7 +159,7 @@ describe("フロントエンド App コンポーネントのテスト", () => {
   });
 
   it("記事取得失敗時にエラーメッセージと再試行ボタンが表示され、再試行できること", async () => {
-    vi.mocked(sqliteClient.fetchDailyArticles).mockRejectedValueOnce(
+    vi.mocked(apiClient.fetchDailyArticles).mockRejectedValueOnce(
       new Error("ネットワーク接続エラー"),
     );
 
@@ -166,10 +167,59 @@ describe("フロントエンド App コンポーネントのテスト", () => {
 
     expect(await screen.findByText(/ネットワーク接続エラー/)).toBeDefined();
 
-    vi.mocked(sqliteClient.fetchDailyArticles).mockResolvedValueOnce(mockDailyArticles);
+    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValueOnce(mockDailyArticles);
     const retryBtn = screen.getByRole("button", { name: /再試行/i });
     fireEvent.click(retryBtn);
 
     expect(await screen.findByText("本日のおすすめAIニュース")).toBeDefined();
+  });
+
+  it("さらに読み込むボタンをクリックすると次ページの記事が取得されてリストに追加されること", async () => {
+    // 初回30件
+    const initialArticles: Article[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `art-initial-${i}`,
+      title: `記事 ${i + 1}`,
+      url: `https://example.com/art-${i}`,
+      source_name: "Source",
+      summary: `要約 ${i + 1}`,
+      score: 80,
+      published_at: "2026-08-19T00:00:00.000Z",
+    }));
+
+    // 追加10件
+    const moreArticles: Article[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `art-more-${i}`,
+      title: `追加記事 ${i + 1}`,
+      url: `https://example.com/more-${i}`,
+      source_name: "Source",
+      summary: `追加要約 ${i + 1}`,
+      score: 70,
+      published_at: "2026-08-19T00:00:00.000Z",
+    }));
+
+    vi.mocked(apiClient.fetchDailyArticles)
+      .mockResolvedValueOnce(initialArticles)
+      .mockResolvedValueOnce(moreArticles);
+
+    render(<App initialDate="2026-08-19" />);
+
+    expect(await screen.findByText("記事 1")).toBeDefined();
+
+    // 「さらに読み込む」ボタン
+    const loadMoreBtn = await screen.findByRole("button", { name: /さらに読み込む/i });
+    fireEvent.click(loadMoreBtn);
+
+    await waitFor(() => {
+      expect(apiClient.fetchDailyArticles).toHaveBeenCalledWith(
+        "2026-08-19",
+        expect.objectContaining({
+          limit: 30,
+          offset: 30,
+        }),
+      );
+    });
+
+    expect(await screen.findByText("追加記事 1")).toBeDefined();
+    expect(screen.getByText("記事 1")).toBeDefined();
   });
 });

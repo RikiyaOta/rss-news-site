@@ -29,10 +29,9 @@ jobs:
       - name: 依存パッケージのインストール
         run: pnpm install --frozen-lockfile
 
-      - name: パイプライン実行 (RSS収集・スコアリング・ベクトル化・R2アップロード)
+      - name: パイプライン実行 (RSS収集・スコアリング・ベクトル化・D1同期)
         env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME || 'rss-news-site-data' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
         run: pnpm pipeline

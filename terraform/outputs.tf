@@ -1,24 +1,19 @@
-output "r2_bucket_name" {
-  description = "Cloudflare R2 data bucket name"
-  value       = cloudflare_r2_bucket.data.name
+output "d1_database_id" {
+  description = "ID of the Cloudflare D1 database"
+  value       = cloudflare_d1_database.news_db.id
 }
 
-output "pages_project_name" {
-  description = "Cloudflare Pages project name"
-  value       = cloudflare_pages_project.site.name
+output "d1_database_name" {
+  description = "Name of the Cloudflare D1 database"
+  value       = cloudflare_d1_database.news_db.name
 }
 
-output "pages_subdomain" {
-  description = "Cloudflare Pages subdomain URL"
-  value       = cloudflare_pages_project.site.subdomain
+output "worker_name" {
+  description = "Name of the Cloudflare Worker"
+  value       = var.worker_name
 }
 
 output "custom_domain" {
-  description = "Cloudflare Pages custom domain"
-  value       = cloudflare_pages_domain.custom.name
-}
-
-output "r2_public_url" {
-  description = "Public URL for the R2 data bucket"
-  value       = "https://${cloudflare_r2_managed_domain.data.domain}"
+  description = "Custom domain for the Cloudflare Worker"
+  value       = var.custom_domain
 }

@@ -2,6 +2,7 @@ import Database, { Database as DatabaseType } from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import { Article } from "../shared/types";
+import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
 
 export interface SearchVectorRecord {
   article_id: string;
@@ -20,7 +21,87 @@ function ensureDirectory(filePath: string): void {
 }
 
 /**
- * 日別SQLiteデータベースを初期化し、テーブルとインデックスを作成する
+ * ローカル D1 互換 SQLite データベースを初期化し、テーブルとインデックスを作成する
+ */
+export function initLocalDatabase(filePath: string): DatabaseType {
+  ensureDirectory(filePath);
+  const db = new Database(filePath);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS articles (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      url TEXT NOT NULL UNIQUE,
+      source_name TEXT NOT NULL,
+      summary TEXT,
+      score INTEGER NOT NULL,
+      published_at TEXT NOT NULL,
+      published_date_jst TEXT NOT NULL,
+      embedding BLOB,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_articles_jst_score ON articles(published_date_jst, score DESC);
+    CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
+    CREATE INDEX IF NOT EXISTS idx_articles_score ON articles(score DESC);
+  `);
+
+  return db;
+}
+
+/**
+ * ローカル SQLite データベースに記事配列を一括 upsert する
+ */
+export function upsertArticlesLocal(db: DatabaseType, articles: ArticleInput[]): void {
+  if (articles.length === 0) {
+    return;
+  }
+
+  const upsertStmt = db.prepare(`
+    INSERT INTO articles (
+      id, title, url, source_name, summary, score, published_at, published_date_jst, embedding
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(url) DO UPDATE SET
+      title = excluded.title,
+      source_name = excluded.source_name,
+      summary = excluded.summary,
+      score = excluded.score,
+      published_at = excluded.published_at,
+      published_date_jst = excluded.published_date_jst,
+      embedding = COALESCE(excluded.embedding, articles.embedding);
+  `);
+
+  const tx = db.transaction((items: ArticleInput[]) => {
+    for (const article of items) {
+      const publishedDateJst =
+        article.published_date_jst ?? computePublishedDateJst(article.published_at);
+      const buffer = article.embedding
+        ? Buffer.from(
+            article.embedding.buffer,
+            article.embedding.byteOffset,
+            article.embedding.byteLength,
+          )
+        : null;
+
+      upsertStmt.run(
+        article.id,
+        article.title,
+        article.url,
+        article.source_name,
+        article.summary ?? null,
+        article.score,
+        article.published_at,
+        publishedDateJst,
+        buffer,
+      );
+    }
+  });
+
+  tx(articles);
+}
+
+/**
+ * 日別SQLiteデータベースを初期化し、テーブルとインデックスを作成する（旧互換）
  */
 export function initDailyDatabase(filePath: string): DatabaseType {
   ensureDirectory(filePath);
@@ -43,7 +124,7 @@ export function initDailyDatabase(filePath: string): DatabaseType {
 }
 
 /**
- * 全体検索インデックスSQLiteデータベースを初期化し、テーブルとインデックスを作成する
+ * 全体検索インデックスSQLiteデータベースを初期化し、テーブルとインデックスを作成する（旧互換）
  */
 export function initSearchIndexDatabase(filePath: string): DatabaseType {
   ensureDirectory(filePath);
@@ -80,7 +161,7 @@ export function getExistingSearchIndexIds(db: DatabaseType): Set<string> {
 }
 
 /**
- * 記事リストをトランザクション内で一括挿入または更新する
+ * 記事リストをトランザクション内で一括挿入または更新する（旧互換）
  */
 export function insertArticles(db: DatabaseType, articles: Article[]): void {
   if (articles.length === 0) {
@@ -110,7 +191,7 @@ export function insertArticles(db: DatabaseType, articles: Article[]): void {
 }
 
 /**
- * ベクトル埋め込みリストをトランザクション内で一括挿入または更新する
+ * ベクトル埋め込みリストをトランザクション内で一括挿入または更新する（旧互換）
  * Float32Array は BLOB（Buffer）として保存される
  */
 export function insertVectors(db: DatabaseType, items: SearchVectorRecord[]): void {

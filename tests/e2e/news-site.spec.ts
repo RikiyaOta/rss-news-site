@@ -1,20 +1,12 @@
 import { test, expect } from "@playwright/test";
-import Database from "better-sqlite3";
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const sqlWasmPath = path.resolve(__dirname, "../../node_modules/sql.js/dist/sql-wasm.wasm");
-const sqlWasmBuffer = fs.readFileSync(sqlWasmPath);
-
-function getTodayString(): string {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+function getTodayJstString(): string {
+  const now = new Date();
+  const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const yyyy = jstDate.getUTCFullYear();
+  const mm = String(jstDate.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(jstDate.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function adjustDate(dateStr: string, offsetDays: number): string {
@@ -27,75 +19,8 @@ function adjustDate(dateStr: string, offsetDays: number): string {
   return `${year}-${month}-${day}`;
 }
 
-function createDailyDbBuffer(
-  articles: Array<{
-    id: string;
-    title: string;
-    url: string;
-    source_name: string;
-    summary: string;
-    score: number;
-    published_at: string;
-  }>,
-): Buffer {
-  const db = new Database(":memory:");
-  db.exec(`
-    CREATE TABLE articles (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      url TEXT NOT NULL,
-      source_name TEXT NOT NULL,
-      summary TEXT NOT NULL,
-      score INTEGER NOT NULL,
-      published_at TEXT NOT NULL
-    );
-  `);
-  const stmt = db.prepare(`
-    INSERT INTO articles (id, title, url, source_name, summary, score, published_at)
-    VALUES (@id, @title, @url, @source_name, @summary, @score, @published_at)
-  `);
-  for (const article of articles) {
-    stmt.run(article);
-  }
-  const buffer = db.serialize();
-  db.close();
-  return buffer;
-}
-
-function createSearchIndexDbBuffer(
-  items: Array<{
-    article_id: string;
-    date: string;
-    vector: Float32Array;
-  }>,
-): Buffer {
-  const db = new Database(":memory:");
-  db.exec(`
-    CREATE TABLE search_index (
-      article_id TEXT,
-      date TEXT,
-      embedding BLOB
-    );
-  `);
-  const stmt = db.prepare(`
-    INSERT INTO search_index (article_id, date, embedding)
-    VALUES (?, ?, ?)
-  `);
-  for (const item of items) {
-    const uint8 = new Uint8Array(
-      item.vector.buffer,
-      item.vector.byteOffset,
-      item.vector.byteLength,
-    );
-    stmt.run(item.article_id, item.date, Buffer.from(uint8));
-  }
-  const buffer = db.serialize();
-  db.close();
-  return buffer;
-}
-
 test.describe("AI RSS News サイトの E2E 結合検証", () => {
-  const todayStr = getTodayString();
+  const todayStr = getTodayJstString();
   const yesterdayStr = adjustDate(todayStr, -1);
 
   const todayArticles = [
@@ -105,7 +30,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
       url: "https://example.com/today-1",
       source_name: "Tech Portal",
       summary:
-        "Cloudflare R2とWasm SQLiteを活用したサーバーレス構成。多言語ベクトルモデルによる高速な興味関心スコアリングとブラウザ内セマンティック検索を提供します。",
+        "Cloudflare Workers Static AssetsとHono、D1を活用したサーバーレス構成。Workers AI (BGE-M3) によるベクトル検索を提供します。",
       score: 95,
       published_at: `${todayStr}T08:00:00.000Z`,
     },
@@ -128,101 +53,81 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
       url: "https://example.com/yest-1",
       source_name: "Dev Weekly",
       summary:
-        "WebAssemblyとクライアントサイドDBの最新事例。エッジコンピューティングにおけるベクトル検索の進化とオープンソースLLMの活用手法について解説します。",
+        "エッジコンピューティングにおけるベクトル検索の進化とオープンソースLLMの活用手法について解説します。",
       score: 88,
       published_at: `${yesterdayStr}T12:00:00.000Z`,
     },
   ];
 
-  const unitVector = new Float32Array(384);
-  unitVector.fill(1.0 / Math.sqrt(384));
-
-  const searchIndexItems = [
+  const searchResults = [
     {
-      article_id: "art-today-2",
+      id: "art-today-2",
+      title: "TypeScript 5.8の新機能とコンパイラ高速化",
+      url: "https://example.com/today-2",
+      source_name: "TypeScript News",
+      summary:
+        "モジュール解決パフォーマンスの大幅な改善と新しい型アサーション構文のサポートにより、開発効率がさらに向上しました。",
+      score: 82,
+      published_at: `${todayStr}T09:30:00.000Z`,
       date: todayStr,
-      vector: unitVector,
+      similarity: 0.88,
     },
     {
-      article_id: "art-today-1",
+      id: "art-today-1",
+      title: "AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能",
+      url: "https://example.com/today-1",
+      source_name: "Tech Portal",
+      summary:
+        "Cloudflare Workers Static AssetsとHono、D1を活用したサーバーレス構成。Workers AI (BGE-M3) によるベクトル検索を提供します。",
+      score: 95,
+      published_at: `${todayStr}T08:00:00.000Z`,
       date: todayStr,
-      vector: unitVector,
+      similarity: 0.75,
     },
   ];
 
   test.beforeEach(async ({ page }) => {
-    // Web Worker をブラウザ環境でモック化（E2E_REAL_MODEL が有効な場合は本物の Worker を使用）
-    if (!process.env.E2E_REAL_MODEL) {
-      await page.addInitScript(() => {
-        window.Worker = class MockWorker extends EventTarget {
-          constructor() {
-            super();
-          }
-          postMessage(data: any) {
-            setTimeout(() => {
-              const vec = new Float32Array(384);
-              vec.fill(1.0 / Math.sqrt(384));
-              const event = new MessageEvent("message", {
-                data: {
-                  id: data.id,
-                  vector: Array.from(vec),
-                },
-              });
-              this.dispatchEvent(event);
-              if (typeof (this as any).onmessage === "function") {
-                (this as any).onmessage(event);
-              }
-            }, 10);
-          }
-          terminate() {}
-        } as any;
-      });
-    }
+    // 日別記事 API リクエストのインターセプト (/api/articles?date=...)
+    await page.route("**/api/articles*", async (route) => {
+      const url = new URL(route.request().url());
+      const date = url.searchParams.get("date") || todayStr;
 
-    const todayDbBuf = createDailyDbBuffer(todayArticles);
-    const yesterdayDbBuf = createDailyDbBuffer(yesterdayArticles);
-    const searchIndexDbBuf = createSearchIndexDbBuffer(searchIndexItems);
-
-    // sql.js の wasm ファイルリクエストをローカルファイルでインターセプト
-    await page.route(/.*sql-wasm.*\.wasm/, async (route) => {
-      const req = route.request();
-      if (
-        req.resourceType() === "script" ||
-        req.url().includes("import") ||
-        req.url().includes("?url")
-      ) {
-        await route.continue();
-        return;
+      if (date === yesterdayStr) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            date: yesterdayStr,
+            total: yesterdayArticles.length,
+            articles: yesterdayArticles,
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            date: todayStr,
+            total: todayArticles.length,
+            articles: todayArticles,
+          }),
+        });
       }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/wasm",
-        body: sqlWasmBuffer,
-      });
     });
 
-    // 日別 DB および検索インデックス DB のネットワークリクエストをインターセプト
-    await page.route(`**/data/${todayStr}.db`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/vnd.sqlite3",
-        body: todayDbBuf,
-      });
-    });
+    // セマンティック検索 API リクエストのインターセプト (/api/search?q=...)
+    await page.route("**/api/search*", async (route) => {
+      const url = new URL(route.request().url());
+      const q = url.searchParams.get("q") || "";
 
-    await page.route(`**/data/${yesterdayStr}.db`, async (route) => {
       await route.fulfill({
         status: 200,
-        contentType: "application/vnd.sqlite3",
-        body: yesterdayDbBuf,
-      });
-    });
-
-    await page.route("**/search_index.db", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/vnd.sqlite3",
-        body: searchIndexDbBuf,
+        contentType: "application/json",
+        body: JSON.stringify({
+          query: q,
+          total: searchResults.length,
+          results: searchResults,
+        }),
       });
     });
   });
@@ -231,7 +136,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await page.goto("/");
 
     // 1. タイトル「AI RSS News Dashboard」が表示されること
-    const heading = page.getByRole("heading", { name: /AI RSS News Dashboard/ });
+    const heading = page.getByRole("heading", { level: 1, name: /AI RSS News Dashboard/ });
     await expect(heading).toBeVisible();
 
     // 2. 日付ナビゲーションとカレンダーピッカーが表示されること
@@ -257,7 +162,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await expect(firstCard.getByText("Tech Portal")).toBeVisible();
     await expect(firstCard.getByTestId("score-badge")).toHaveText(/スコア:\s*95点/);
     await expect(
-      firstCard.getByText(/Cloudflare R2とWasm SQLiteを活用したサーバーレス構成/),
+      firstCard.getByText(/Cloudflare Workers Static AssetsとHono、D1を活用したサーバーレス構成/),
     ).toBeVisible();
   });
 
@@ -304,20 +209,16 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     const searchBtn = page.getByRole("button", { name: "検索", exact: true });
     await searchBtn.click();
 
-    // 検索結果に「一致度 XX%」バッジと該当日付バッジが表示されること（実モデルロード時は最大60秒待機）
-    const articleCards = page.getByTestId("article-card");
-    await expect(articleCards.first()).toBeVisible({
-      timeout: process.env.E2E_REAL_MODEL ? 60000 : 5000,
-    });
+    // 検索結果に「一致度 XX%」バッジと該当日付バッジが表示されること
+    const similarityBadge = page.getByTestId("similarity-badge").first();
+    await expect(similarityBadge).toBeVisible();
+    await expect(similarityBadge).toHaveText(/一致度\s*88%/);
 
-    const similarityBadge = articleCards.first().getByTestId("similarity-badge");
-    await expect(similarityBadge).toBeVisible({
-      timeout: process.env.E2E_REAL_MODEL ? 60000 : 5000,
-    });
-    await expect(similarityBadge).toHaveText(/一致度\s*-?\d+%/);
+    const firstSearchCard = page.getByTestId("article-card").filter({ visible: true }).first();
+    await expect(firstSearchCard).toBeVisible();
 
     // 該当日付バッジが表示されること
-    await expect(articleCards.first().getByText(todayStr)).toBeVisible();
+    await expect(firstSearchCard.getByText(todayStr)).toBeVisible();
   });
 
   test("シナリオ 4: 検索のクリア操作で入力欄がリセットされ、日別ニュース一覧に戻ること", async ({
@@ -334,9 +235,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     const searchBtn = page.getByRole("button", { name: "検索", exact: true });
     await searchBtn.click();
 
-    await expect(page.getByTestId("similarity-badge").first()).toBeVisible({
-      timeout: process.env.E2E_REAL_MODEL ? 60000 : 5000,
-    });
+    await expect(page.getByTestId("similarity-badge").first()).toBeVisible();
 
     // クリアボタンをクリック
     const clearBtn = page.getByRole("button", { name: "クリア" });
@@ -361,7 +260,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await page.goto("/");
 
     // ヘッダーとタイトルが表示されていること
-    const heading = page.getByRole("heading", { name: /AI RSS News Dashboard/ });
+    const heading = page.getByRole("heading", { level: 1, name: /AI RSS News Dashboard/ });
     await expect(heading).toBeVisible();
 
     // 日付ピッカーとナビゲーションが表示されていること
@@ -373,7 +272,13 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await expect(articleCards.first()).toBeVisible();
     await expect(articleCards.first().getByTestId("score-badge")).toBeVisible();
     await expect(
-      articleCards.first().getByText(/Cloudflare R2とWasm SQLiteを活用したサーバーレス構成/),
+      articleCards
+        .first()
+        .getByText(/Cloudflare Workers Static AssetsとHono、D1を活用したサーバーレス構成/),
     ).toBeVisible();
+
+    // 過剰な DOM レンダリングがないことを検証 (ノード数 < 150)
+    const domCount = await page.evaluate(() => document.querySelectorAll("*").length);
+    expect(domCount).toBeLessThan(150);
   });
 });

@@ -46,18 +46,13 @@ jobs:
           AWS_ENDPOINT_URL_S3: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
           TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           TF_VAR_cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          terraform apply -auto-approve
-          R2_URL=$(terraform output -raw r2_public_url 2>/dev/null || echo "")
-          echo "R2_PUBLIC_URL=$R2_URL" >> $GITHUB_ENV
+        run: terraform apply -auto-approve
 
       - name: フロントエンドビルド
-        env:
-          VITE_R2_PUBLIC_URL: ${{ env.R2_PUBLIC_URL || secrets.VITE_R2_PUBLIC_URL }}
         run: pnpm build
 
-      - name: Cloudflare Pages へデプロイ
+      - name: Cloudflare Workers (Static Assets) へデプロイ
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: pnpm exec wrangler pages deploy dist --project-name=rss-news-site --branch=main
+        run: pnpm exec wrangler deploy

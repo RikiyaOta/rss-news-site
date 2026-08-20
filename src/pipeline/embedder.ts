@@ -3,7 +3,7 @@ import { pipeline } from "@huggingface/transformers";
 let extractorInstance: any = null;
 
 /**
- * intfloat/multilingual-e5-small の仕様に従い、記事タイトルと要約を passage フォーマットに整形する
+ * BAAI/bge-m3 の仕様に従い、記事タイトルと要約を passage フォーマットに整形する
  */
 export function formatPassageText(title: string, summary: string): string {
   return `passage: ${title.trim()}\n${summary.trim()}`;
@@ -33,14 +33,14 @@ export function l2Normalize(vector: Float32Array | number[]): Float32Array {
  */
 export async function getExtractor(customPipeline?: any): Promise<any> {
   if (customPipeline) {
-    extractorInstance = await customPipeline("feature-extraction", "Xenova/multilingual-e5-small", {
+    extractorInstance = await customPipeline("feature-extraction", "BAAI/bge-m3", {
       dtype: "fp32",
     });
     return extractorInstance;
   }
 
   if (!extractorInstance) {
-    extractorInstance = await pipeline("feature-extraction", "Xenova/multilingual-e5-small", {
+    extractorInstance = await pipeline("feature-extraction", "BAAI/bge-m3", {
       dtype: "fp32",
     });
   }
@@ -63,7 +63,7 @@ export function resetExtractor(): void {
 }
 
 /**
- * 記事のタイトルと要約から 384 次元の多言語ベクトル埋め込みを生成する
+ * 記事のタイトルと要約から 1024 次元の多言語ベクトル埋め込みを生成する
  */
 export async function generateArticleEmbedding(
   title: string,

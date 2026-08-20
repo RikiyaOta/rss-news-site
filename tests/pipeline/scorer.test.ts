@@ -79,7 +79,7 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
   describe("precomputeInterestVectors - 関心キーワードのベクトル事前計算", () => {
     it("ユーザー関心キーワード群の query ベクトルを事前計算し、Map に格納すること", async () => {
       const mockExtractor = vi.fn().mockImplementation(async () => {
-        const raw = new Float32Array(384).fill(0.1);
+        const raw = new Float32Array(1024).fill(0.1);
         return { data: raw };
       });
 
@@ -99,11 +99,12 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       expect(vectorMap.has("TypeScript")).toBe(true);
       expect(vectorMap.has("React")).toBe(true);
       expect(vectorMap.get("TypeScript")).toBeInstanceOf(Float32Array);
+      expect(vectorMap.get("TypeScript")?.length).toBe(1024);
     });
 
     it("空文字や空白のみのキーワードはスキップすること", async () => {
       const mockExtractor = vi.fn().mockImplementation(async () => ({
-        data: new Float32Array(384).fill(0.1),
+        data: new Float32Array(1024).fill(0.1),
       }));
 
       const interests = ["TypeScript", "  ", "", "React"];
@@ -119,7 +120,7 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       const mockExtractor = vi.fn().mockImplementation(async (text: string) => {
         // TypeScript や React を含む場合は類似するベクトルを返すモック
         const isTs = text.includes("TypeScript") || text.includes("React");
-        const vector = new Float32Array(384).fill(isTs ? 0.5 : 0.01);
+        const vector = new Float32Array(1024).fill(isTs ? 0.5 : 0.01);
         return { data: vector };
       });
 
@@ -138,12 +139,12 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       expect(result.score).toBeGreaterThanOrEqual(65);
       expect(result.maxSimilarity).toBeGreaterThan(0.8);
       expect(result.articleVector).toBeInstanceOf(Float32Array);
-      expect(result.articleVector.length).toBe(384);
+      expect(result.articleVector.length).toBe(1024);
     });
 
     it("除外キーワードが含まれる記事は低スコアになること", async () => {
       const mockExtractor = vi.fn().mockImplementation(async () => ({
-        data: new Float32Array(384).fill(0.5),
+        data: new Float32Array(1024).fill(0.5),
       }));
 
       const result = await scoreArticleWithProfile(
@@ -156,15 +157,16 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
 
       expect(result.score).toBeLessThanOrEqual(10);
       expect(result.articleVector).toBeInstanceOf(Float32Array);
+      expect(result.articleVector.length).toBe(1024);
     });
 
     it("事前計算済みの関心ベクトルマップを受け取った場合に extractor の再計算を回避すること", async () => {
       const precomputedMap = new Map<string, Float32Array>();
-      const vec = new Float32Array(384).fill(1 / Math.sqrt(384));
+      const vec = new Float32Array(1024).fill(1 / Math.sqrt(1024));
       precomputedMap.set("TypeScript", vec);
 
       const mockExtractor = vi.fn().mockImplementation(async () => ({
-        data: new Float32Array(384).fill(1 / Math.sqrt(384)),
+        data: new Float32Array(1024).fill(1 / Math.sqrt(1024)),
       }));
 
       const result = await scoreArticleWithProfile(
@@ -179,6 +181,7 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       expect(mockExtractor).toHaveBeenCalledTimes(1);
       expect(result.score).toBe(100);
       expect(result.maxSimilarity).toBeCloseTo(1.0, 4);
+      expect(result.articleVector.length).toBe(1024);
     });
   });
 });
