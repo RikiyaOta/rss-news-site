@@ -1,3 +1,20 @@
+# ==============================================================================
+# Architecture Design Note: Terraform & Wrangler 責務分離方針 (Cloudflare Best Practice)
+# ==============================================================================
+# - Terraform の責務:
+#   - 永続インフラ・長寿命リソース（Cloudflare D1 データベース `rss-news-db`）の作成とライフサイクル管理。
+# - Wrangler の責務 (`wrangler.jsonc`):
+#   - アプリケーションコード（Hono サーバー）のバンドル & デプロイ
+#   - React SPA 静的アセット (`dist/`) の差分アップロード
+#   - D1 / Workers AI バインディングの接続
+#   - カスタムドメイン (`rss-news.rikiyaota.kyoto`) のルーティング設定
+#
+# ※ Worker 本体（cloudflare_workers_script）を Terraform で管理しようとすると、
+#   ダミースクリプトによる初期化ハックや ignore_changes が必要となり、wrangler deploy との
+#   間で二重管理・設定競合（スキーマ不整合・パーミッションエラー）が発生するため、
+#   公式推奨に従い Worker のアプリケーション層は wrangler.jsonc に一本化しています。
+# ==============================================================================
+
 terraform {
   required_version = ">= 1.5.0"
   required_providers {
@@ -12,15 +29,6 @@ provider "cloudflare" {
   api_token = var.cloudflare_api_token
 }
 
-data "cloudflare_zones" "primary" {
-  name = var.zone_name
-}
-
-locals {
-  matched_zones = try(data.cloudflare_zones.primary.result, [])
-  zone_id       = length(local.matched_zones) > 0 ? local.matched_zones[0].id : var.cloudflare_zone_id
-}
-
 resource "cloudflare_d1_database" "news_db" {
   account_id = var.cloudflare_account_id
   name       = var.d1_database_name
@@ -28,37 +36,4 @@ resource "cloudflare_d1_database" "news_db" {
   read_replication = {
     mode = "disabled"
   }
-}
-
-resource "cloudflare_workers_script" "site" {
-  account_id          = var.cloudflare_account_id
-  script_name         = var.worker_name
-  main_module         = "index.js"
-  content             = "export default { fetch() { return new Response('ok'); } };"
-  compatibility_date  = "2026-08-20"
-  compatibility_flags = ["nodejs_compat"]
-
-  bindings = [
-    {
-      name = "DB"
-      type = "d1"
-      id   = cloudflare_d1_database.news_db.id
-    },
-    {
-      name = "AI"
-      type = "ai"
-    }
-  ]
-
-  lifecycle {
-    ignore_changes = [content, assets]
-  }
-}
-
-resource "cloudflare_workers_custom_domain" "custom" {
-  count      = local.zone_id != null ? 1 : 0
-  account_id = var.cloudflare_account_id
-  hostname   = var.custom_domain
-  service    = cloudflare_workers_script.site.script_name
-  zone_id    = local.zone_id
 }

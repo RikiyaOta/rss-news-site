@@ -19,7 +19,7 @@ GitHub Actions による毎日の自動巡回で最新の技術記事を収集�
 - **モダン & 軽量なフロントエンド:**
   - React 19 + Tailwind CSS + Lucide Icons による快適な UI/UX。日別ナビゲーションとセマンティック検索のシームレスなタブ切り替え。
 - **IaC & 自動デプロイ:**
-  - Terraform による Cloudflare インフラ（D1 / Pages）のコード管理、および GitHub Actions による CI/CD・日次バッチ・定期 E2E テスト。
+  - Terraform による Cloudflare D1 データベースのコード管理、および Wrangler による Cloudflare Workers (Static Assets) への自動デプロイ。GitHub Actions による CI/CD・日次バッチ・定期 E2E テスト。
 
 ---
 
@@ -62,8 +62,8 @@ Terraform の状態ファイル（`terraform.tfstate`）を管理するため、
 
 | シークレット名 | 説明 | 必須 |
 |---|---|:---:|
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID（Terraform / Pages / D1 用） | 必須 |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare D1 & Pages の編集権限を持つ API トークン | 必須 |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID（Terraform / Workers / D1 用） | 必須 |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare D1 & Workers の編集権限を持つ API トークン | 必須 |
 | `CLOUDFLARE_D1_DATABASE_ID` | Cloudflare D1 データベース ID（日次パイプライン同期用） | 必須 |
 | `R2_ACCESS_KEY_ID` | Terraform tfstate 管理用 R2 の S3 互換 Access Key ID | 必須 |
 | `R2_SECRET_ACCESS_KEY` | Terraform tfstate 管理用 R2 の S3 互換 Secret Access Key | 必須 |
@@ -71,7 +71,7 @@ Terraform の状態ファイル（`terraform.tfstate`）を管理するため、
 ### 3. 初回デプロイとデータ生成
 
 1. **インフラ & フロントエンドのデプロイ:**
-   - コードを `main` ブランチに push すると、`.github/workflows/deploy.yml` が自動起動し、Terraform の適用（D1 データベース作成など）と Cloudflare Pages へのデプロイが完了します。
+   - コードを `main` ブランチに push すると、`.github/workflows/deploy.yml` が自動起動し、Terraform の適用（D1 データベース作成）と Cloudflare Workers (Static Assets) へのデプロイが完了します。
 2. **初回の記事収集パイプライン実行:**
    - GitHub の **Actions** タブから `Daily Pipeline` ワークフローを選択し、**Run workflow**（手動実行）をクリックして初回データを収集し、D1 データベースに同期します。
 
