@@ -5,7 +5,7 @@ export interface D1SyncOptions {
   databaseId: string;
   apiToken: string;
   articles: ArticleInput[];
-  batchSize?: number; // default: 25
+  batchSize?: number; // default: 5 (100KB SQLITE_MAX_SQL_LENGTH 制約に対応)
   customFetch?: typeof fetch;
 }
 
@@ -114,7 +114,7 @@ export async function ensureD1Schema(
  * Cloudflare D1 REST API (/raw) を用いて記事データをバッチ同期 (UPSERT) する
  */
 export async function syncArticlesToD1(options: D1SyncOptions): Promise<D1SyncResult> {
-  const { accountId, databaseId, apiToken, articles, batchSize = 25 } = options;
+  const { accountId, databaseId, apiToken, articles, batchSize = 5 } = options;
 
   if (
     !accountId ||
