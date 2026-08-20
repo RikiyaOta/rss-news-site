@@ -215,4 +215,65 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     expect(result.errors).toBeDefined();
     expect(result.errors?.length).toBeGreaterThan(0);
   });
+
+  describe("fetchExistingUrlsFromD1", () => {
+    it("D1 REST API から登録済みの URL 一覧を Set として取得できること", async () => {
+      const { fetchExistingUrlsFromD1 } = await import("../../src/pipeline/d1-sync");
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          result: [
+            {
+              results: [
+                { url: "https://example.com/articles/1" },
+                { url: "https://example.com/articles/2" },
+              ],
+            },
+          ],
+          success: true,
+        }),
+      });
+
+      const urlSet = await fetchExistingUrlsFromD1({
+        accountId: "acc-123",
+        databaseId: "db-456",
+        apiToken: "token-789",
+        sinceDateJst: "2026-08-17",
+        customFetch: mockFetch as any,
+      });
+
+      expect(urlSet.size).toBe(2);
+      expect(urlSet.has("https://example.com/articles/1")).toBe(true);
+      expect(urlSet.has("https://example.com/articles/2")).toBe(true);
+      expect(urlSet.has("https://example.com/articles/unknown")).toBe(false);
+
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toBe(
+        "https://api.cloudflare.com/client/v4/accounts/acc-123/d1/database/db-456/raw",
+      );
+      const body = JSON.parse(init.body);
+      expect(body.sql).toContain("SELECT url FROM articles WHERE published_date_jst >= ?");
+      expect(body.params).toEqual(["2026-08-17"]);
+    });
+
+    it("設定が不足している場合や API エラー発生時に安全に空の Set を返すこと", async () => {
+      const { fetchExistingUrlsFromD1 } = await import("../../src/pipeline/d1-sync");
+      const emptySet = await fetchExistingUrlsFromD1({
+        accountId: "",
+        databaseId: "",
+        apiToken: "",
+      });
+      expect(emptySet.size).toBe(0);
+
+      const mockErrorFetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+      const errorSet = await fetchExistingUrlsFromD1({
+        accountId: "acc-123",
+        databaseId: "db-456",
+        apiToken: "token-789",
+        customFetch: mockErrorFetch as any,
+      });
+      expect(errorSet.size).toBe(0);
+    });
+  });
 });

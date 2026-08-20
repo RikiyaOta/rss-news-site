@@ -319,7 +319,7 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       const result = await runPipeline(options);
 
       expect(result.date).toBe("2026-08-01");
-      expect(fetchSpy).toHaveBeenCalledWith(expect.any(Object), customParser);
+      expect(fetchSpy).toHaveBeenCalledWith(expect.any(Object), customParser, customFetch, 3);
       expect(precomputeSpy).toHaveBeenCalledWith(mockConfig.profile.interests, customExtractor);
       expect(scoreSpy).toHaveBeenCalledWith(
         sampleRawArticles[0].title,
