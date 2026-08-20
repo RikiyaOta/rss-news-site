@@ -67,6 +67,7 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
 
       expect(content).toMatch(/resource\s+"cloudflare_workers_script"\s+"site"/);
       expect(content).toMatch(/script_name\s*=\s*var\.worker_name/);
+      expect(content).toMatch(/main_module\s*=\s*"index\.js"/);
       expect(content).toMatch(/compatibility_flags\s*=\s*\["nodejs_compat"\]/);
       expect(content).toMatch(/name\s*=\s*"DB"/);
       expect(content).toMatch(/type\s*=\s*"d1"/);
