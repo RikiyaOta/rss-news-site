@@ -196,6 +196,100 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     }
   });
 
+  it("D1 REST API の制約に則り、送信される SQL が単一ステートメントであり、プレースホルダー (?) の個数と params.length が完全一致すること", async () => {
+    let capturedPayload: any;
+
+    const mockFetch = vi.fn().mockImplementation((_url, init) => {
+      capturedPayload = JSON.parse(init.body);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      });
+    });
+
+    await syncArticlesToD1({
+      accountId: "acc-test",
+      databaseId: "db-test",
+      apiToken: "tok-test",
+      articles: sampleArticles,
+      customFetch: mockFetch as any,
+    });
+
+    // 1. セミコロンによる複数クエリの連結が存在しないこと（D1 raw API では params 併用時に複数クエリ禁止）
+    const trimmedSql = capturedPayload.sql.trim();
+    const statements = trimmedSql.split(";").filter((s: string) => s.trim().length > 0);
+    expect(statements.length).toBe(1);
+
+    // 2. プレースホルダーの個数と params の個数が完全に一致すること
+    const placeholderCount = (capturedPayload.sql.match(/\?/g) || []).length;
+    expect(placeholderCount).toBe(capturedPayload.params.length);
+    expect(placeholderCount).toBe(sampleArticles.length * 8);
+  });
+
+  it("SQL インジェクション攻撃文字列を含む記事データが安全にパラメータ化され、意図しない SQL 実行が発生しないこと", async () => {
+    let capturedSql = "";
+    let capturedParams: any[] = [];
+
+    const mockFetch = vi.fn().mockImplementation((_url, init) => {
+      const body = JSON.parse(init.body);
+      capturedSql = body.sql;
+      capturedParams = body.params;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      });
+    });
+
+    const maliciousArticles: ArticleInput[] = [
+      {
+        id: "art-sql-inject-1",
+        title: "Normal Title'); DROP TABLE articles; --",
+        url: "https://example.com/attack?p=1'; DELETE FROM articles WHERE '1'='1",
+        source_name: "Evil Feed' OR '1'='1",
+        summary: "Summary with quotes: ' \" ` and special chars; DROP TABLE articles; --",
+        score: 99,
+        published_at: "2026-08-19T00:00:00.000Z",
+        embedding: new Float32Array(1024).fill(0.5),
+      },
+    ];
+
+    await syncArticlesToD1({
+      accountId: "acc-test",
+      databaseId: "db-test",
+      apiToken: "tok-test",
+      articles: maliciousArticles,
+      customFetch: mockFetch as any,
+    });
+
+    // 実際の SQLite で実行して安全性を実証
+    const db = new Database(":memory:");
+    try {
+      db.exec(SCHEMA_STATEMENTS);
+
+      const stmt = db.prepare(capturedSql);
+      stmt.run(...capturedParams);
+
+      // テーブルが削除されていないこと
+      const tableCheck = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='articles'")
+        .get();
+      expect(tableCheck).toBeDefined();
+
+      // 悪意ある文字列が値として安全に格納されていること
+      const stored = db
+        .prepare("SELECT * FROM articles WHERE id = ?")
+        .get("art-sql-inject-1") as any;
+      expect(stored).toBeDefined();
+      expect(stored.title).toBe("Normal Title'); DROP TABLE articles; --");
+      expect(stored.source_name).toBe("Evil Feed' OR '1'='1");
+      expect(stored.summary).toContain("DROP TABLE articles;");
+    } finally {
+      db.close();
+    }
+  });
+
   it("batchSize に応じて複数回のリクエストに分割して送信されること", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
