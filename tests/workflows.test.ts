@@ -173,12 +173,12 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       }
     });
 
-    it("pnpm build および Terraform によるデプロイ手順が含まれていること", () => {
+    it("pnpm build および Terraform / wrangler deploy によるデプロイ手順が含まれていること", () => {
       const filePath = path.join(workflowsDir, "deploy.yml");
       const content = fs.readFileSync(filePath, "utf-8");
 
       expect(content).toContain("pnpm build");
-      expect(content).toContain("VITE_R2_PUBLIC_URL");
+      expect(content).toContain("wrangler deploy");
       expect(content).toMatch(/terraform\s+init/);
       expect(content).toMatch(/terraform\s+apply/);
     });

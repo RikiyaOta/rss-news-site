@@ -132,13 +132,6 @@ describe("Hono バックエンド API サーバー (src/server/index.ts) のテ�
     });
   });
 
-  describe("CORS ミドルウェア", () => {
-    it("CORS レスポンスヘッダーが付与されていること", async () => {
-      const res = await app.request("/health", {}, mockEnv);
-      expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    });
-  });
-
   describe("GET /api/articles (日別記事一覧取得 API)", () => {
     beforeEach(async () => {
       const articles: ArticleInput[] = [

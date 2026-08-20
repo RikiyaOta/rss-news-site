@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import {
   getArticlesByPublishedDate,
   searchArticlesByVector,
@@ -57,9 +56,6 @@ export function extractEmbeddingVector(aiRes: any): Float32Array {
 }
 
 const app = new Hono<{ Bindings: Bindings }>();
-
-// CORS ミドルウェア
-app.use("*", cors());
 
 // グローバルエラーハンドラ
 app.onError((err, c) => {

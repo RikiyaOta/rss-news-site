@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
-describe("Terraform による Cloudflare D1 & Pages インフラ定義の検証", () => {
+describe("Terraform による Cloudflare D1 & Workers インフラ定義の検証", () => {
   const rootDir = path.resolve(__dirname, "..");
   const tfDir = path.join(rootDir, "terraform");
 
@@ -52,6 +52,16 @@ describe("Terraform による Cloudflare D1 & Pages インフラ定義の検証"
       expect(content).toMatch(/name\s*=\s*var\.d1_database_name/);
     });
 
+    it("Cloudflare Workers カスタムドメインリソース (cloudflare_workers_custom_domain.custom) が正しく定義されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toMatch(/resource\s+"cloudflare_workers_custom_domain"\s+"custom"/);
+      expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
+      expect(content).toMatch(/hostname\s*=\s*var\.custom_domain/);
+      expect(content).toMatch(/service\s*=\s*var\.worker_name/);
+    });
+
     it("不要になった Cloudflare R2 バケットおよび関連リソースが定義されていないこと", () => {
       const mainPath = path.join(tfDir, "main.tf");
       const content = fs.readFileSync(mainPath, "utf-8");
@@ -61,26 +71,12 @@ describe("Terraform による Cloudflare D1 & Pages インフラ定義の検証"
       expect(content).not.toMatch(/resource\s+"cloudflare_r2_bucket_cors"/);
     });
 
-    it("Cloudflare Pages プロジェクトリソース (cloudflare_pages_project.site) が正しく定義されていること", () => {
+    it("不要になった Cloudflare Pages リソースが定義されていないこと", () => {
       const mainPath = path.join(tfDir, "main.tf");
       const content = fs.readFileSync(mainPath, "utf-8");
 
-      expect(content).toMatch(/resource\s+"cloudflare_pages_project"\s+"site"/);
-      expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
-      expect(content).toMatch(/name\s*=\s*var\.pages_project_name/);
-      expect(content).toMatch(/production_branch\s*=\s*var\.production_branch/);
-      expect(content).toMatch(/build_command\s*=\s*"pnpm build"/);
-      expect(content).toMatch(/destination_dir\s*=\s*"dist"/);
-    });
-
-    it("Cloudflare Pages カスタムドメインリソース (cloudflare_pages_domain.custom) が正しく定義されていること", () => {
-      const mainPath = path.join(tfDir, "main.tf");
-      const content = fs.readFileSync(mainPath, "utf-8");
-
-      expect(content).toMatch(/resource\s+"cloudflare_pages_domain"\s+"custom"/);
-      expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
-      expect(content).toMatch(/project_name\s*=\s*cloudflare_pages_project\.site\.name/);
-      expect(content).toMatch(/name\s*=\s*var\.custom_domain/);
+      expect(content).not.toMatch(/resource\s+"cloudflare_pages_project"/);
+      expect(content).not.toMatch(/resource\s+"cloudflare_pages_domain"/);
     });
   });
 
@@ -107,20 +103,12 @@ describe("Terraform による Cloudflare D1 & Pages インフラ定義の検証"
       expect(content).toMatch(/type\s*=\s*string/);
     });
 
-    it("pages_project_name 変数がデフォルト値 'rss-news-site' で定義されていること", () => {
+    it("worker_name 変数がデフォルト値 'rss-news-site' で定義されていること", () => {
       const varsPath = path.join(tfDir, "variables.tf");
       const content = fs.readFileSync(varsPath, "utf-8");
 
-      expect(content).toMatch(/variable\s+"pages_project_name"/);
+      expect(content).toMatch(/variable\s+"worker_name"/);
       expect(content).toMatch(/default\s*=\s*"rss-news-site"/);
-    });
-
-    it("production_branch 変数がデフォルト値 'main' で定義されていること", () => {
-      const varsPath = path.join(tfDir, "variables.tf");
-      const content = fs.readFileSync(varsPath, "utf-8");
-
-      expect(content).toMatch(/variable\s+"production_branch"/);
-      expect(content).toMatch(/default\s*=\s*"main"/);
     });
 
     it("custom_domain 変数がデフォルト値 'rss-news.rikiyaota.kyoto' で定義されていること", () => {
@@ -131,10 +119,11 @@ describe("Terraform による Cloudflare D1 & Pages インフラ定義の検証"
       expect(content).toMatch(/default\s*=\s*"rss-news\.rikiyaota\.kyoto"/);
     });
 
-    it("不要になった R2 関連変数が定義されていないこと", () => {
+    it("不要になった Pages および R2 関連変数が定義されていないこと", () => {
       const varsPath = path.join(tfDir, "variables.tf");
       const content = fs.readFileSync(varsPath, "utf-8");
 
+      expect(content).not.toMatch(/variable\s+"pages_project_name"/);
       expect(content).not.toMatch(/variable\s+"r2_data_bucket_name"/);
       expect(content).not.toMatch(/variable\s+"r2_cors_allowed_origins"/);
     });
@@ -162,20 +151,12 @@ describe("Terraform による Cloudflare D1 & Pages インフラ定義の検証"
       expect(content).toMatch(/value\s*=\s*cloudflare_d1_database\.news_db\.name/);
     });
 
-    it("pages_project_name 出力が定義されていること", () => {
+    it("worker_name 出力が定義されていること", () => {
       const outputsPath = path.join(tfDir, "outputs.tf");
       const content = fs.readFileSync(outputsPath, "utf-8");
 
-      expect(content).toMatch(/output\s+"pages_project_name"/);
-      expect(content).toMatch(/value\s*=\s*cloudflare_pages_project\.site\.name/);
-    });
-
-    it("pages_subdomain 出力が定義されていること", () => {
-      const outputsPath = path.join(tfDir, "outputs.tf");
-      const content = fs.readFileSync(outputsPath, "utf-8");
-
-      expect(content).toMatch(/output\s+"pages_subdomain"/);
-      expect(content).toMatch(/value\s*=\s*cloudflare_pages_project\.site\.subdomain/);
+      expect(content).toMatch(/output\s+"worker_name"/);
+      expect(content).toMatch(/value\s*=\s*var\.worker_name/);
     });
 
     it("custom_domain 出力が定義されていること", () => {
@@ -183,13 +164,15 @@ describe("Terraform による Cloudflare D1 & Pages インフラ定義の検証"
       const content = fs.readFileSync(outputsPath, "utf-8");
 
       expect(content).toMatch(/output\s+"custom_domain"/);
-      expect(content).toMatch(/value\s*=\s*cloudflare_pages_domain\.custom\.name/);
+      expect(content).toMatch(/value\s*=\s*var\.custom_domain/);
     });
 
-    it("不要になった R2 関連出力が定義されていないこと", () => {
+    it("不要になった Pages および R2 関連出力が定義されていないこと", () => {
       const outputsPath = path.join(tfDir, "outputs.tf");
       const content = fs.readFileSync(outputsPath, "utf-8");
 
+      expect(content).not.toMatch(/output\s+"pages_project_name"/);
+      expect(content).not.toMatch(/output\s+"pages_subdomain"/);
       expect(content).not.toMatch(/output\s+"r2_bucket_name"/);
       expect(content).not.toMatch(/output\s+"r2_public_url"/);
     });

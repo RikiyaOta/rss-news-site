@@ -17,38 +17,10 @@ resource "cloudflare_d1_database" "news_db" {
   name       = var.d1_database_name
 }
 
-resource "cloudflare_pages_project" "site" {
-  account_id        = var.cloudflare_account_id
-  name              = var.pages_project_name
-  production_branch = var.production_branch
-
-  build_config = {
-    build_command   = "pnpm build"
-    destination_dir = "dist"
-  }
-
-  deployment_configs = {
-    production = {
-      env_vars = {
-        NODE_VERSION = {
-          type  = "plain_text"
-          value = "24"
-        }
-      }
-    }
-    preview = {
-      env_vars = {
-        NODE_VERSION = {
-          type  = "plain_text"
-          value = "24"
-        }
-      }
-    }
-  }
-}
-
-resource "cloudflare_pages_domain" "custom" {
-  account_id   = var.cloudflare_account_id
-  project_name = cloudflare_pages_project.site.name
-  name         = var.custom_domain
+resource "cloudflare_workers_custom_domain" "custom" {
+  count      = var.cloudflare_zone_id != null ? 1 : 0
+  account_id = var.cloudflare_account_id
+  hostname   = var.custom_domain
+  service    = var.worker_name
+  zone_id    = var.cloudflare_zone_id
 }

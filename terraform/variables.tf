@@ -16,20 +16,20 @@ variable "d1_database_name" {
   default     = "rss-news-db"
 }
 
-variable "pages_project_name" {
-  description = "Name of the Cloudflare Pages project"
+variable "worker_name" {
+  description = "Cloudflare Worker service name"
   type        = string
   default     = "rss-news-site"
 }
 
-variable "production_branch" {
-  description = "Production branch for Cloudflare Pages"
-  type        = string
-  default     = "main"
-}
-
 variable "custom_domain" {
-  description = "Custom domain for Cloudflare Pages"
+  description = "Custom domain for Cloudflare Worker"
   type        = string
   default     = "rss-news.rikiyaota.kyoto"
+}
+
+variable "cloudflare_zone_id" {
+  description = "Cloudflare Zone ID for custom domain routing (optional)"
+  type        = string
+  default     = null
 }

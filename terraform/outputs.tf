@@ -1,24 +1,19 @@
 output "d1_database_id" {
-  description = "Cloudflare D1 database ID"
+  description = "ID of the Cloudflare D1 database"
   value       = cloudflare_d1_database.news_db.id
 }
 
 output "d1_database_name" {
-  description = "Cloudflare D1 database name"
+  description = "Name of the Cloudflare D1 database"
   value       = cloudflare_d1_database.news_db.name
 }
 
-output "pages_project_name" {
-  description = "Cloudflare Pages project name"
-  value       = cloudflare_pages_project.site.name
-}
-
-output "pages_subdomain" {
-  description = "Cloudflare Pages subdomain URL"
-  value       = cloudflare_pages_project.site.subdomain
+output "worker_name" {
+  description = "Name of the Cloudflare Worker"
+  value       = var.worker_name
 }
 
 output "custom_domain" {
-  description = "Cloudflare Pages custom domain"
-  value       = cloudflare_pages_domain.custom.name
+  description = "Custom domain for the Cloudflare Worker"
+  value       = var.custom_domain
 }
