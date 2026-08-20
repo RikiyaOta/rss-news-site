@@ -1,4 +1,4 @@
-import { ArticleInput, computePublishedDateJst, serializeVector } from "../server/db/articles";
+import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
 
 export interface D1SyncOptions {
   accountId: string;
@@ -33,19 +33,13 @@ CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
 CREATE INDEX IF NOT EXISTS idx_articles_score ON articles(score DESC);
 `.trim();
 
-const UPSERT_STATEMENT = `
-INSERT INTO articles (
-  id, title, url, source_name, summary, score, published_at, published_date_jst, embedding
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(url) DO UPDATE SET
-  title = excluded.title,
-  source_name = excluded.source_name,
-  summary = excluded.summary,
-  score = excluded.score,
-  published_at = excluded.published_at,
-  published_date_jst = excluded.published_date_jst,
-  embedding = COALESCE(excluded.embedding, articles.embedding);
-`.trim();
+export function uint8ArrayToHex(uint8: Uint8Array): string {
+  let hex = "";
+  for (let i = 0; i < uint8.length; i++) {
+    hex += uint8[i].toString(16).padStart(2, "0");
+  }
+  return hex;
+}
 
 /**
  * Cloudflare D1 に既に登録されている記事の URL 一覧を取得する（重複スコアリング計算のスキップ用）
@@ -145,17 +139,24 @@ export async function syncArticlesToD1(options: D1SyncOptions): Promise<D1SyncRe
 
   for (let i = 0; i < articles.length; i += batchSize) {
     const chunk = articles.slice(i, i + batchSize);
-
-    const sql = Array(chunk.length).fill(UPSERT_STATEMENT).join("\n");
+    const valuePlaceholders: string[] = [];
     const params: unknown[] = [];
 
     for (const article of chunk) {
       const publishedDateJst =
         article.published_date_jst ?? computePublishedDateJst(article.published_at);
-      const serializedEmbedding = article.embedding
-        ? Array.from(serializeVector(article.embedding))
-        : null;
 
+      let blobLiteral = "NULL";
+      if (article.embedding) {
+        const uint8 = new Uint8Array(
+          article.embedding.buffer,
+          article.embedding.byteOffset,
+          article.embedding.byteLength,
+        );
+        blobLiteral = `X'${uint8ArrayToHex(uint8)}'`;
+      }
+
+      valuePlaceholders.push(`(?, ?, ?, ?, ?, ?, ?, ?, ${blobLiteral})`);
       params.push(
         article.id,
         article.title,
@@ -165,9 +166,23 @@ export async function syncArticlesToD1(options: D1SyncOptions): Promise<D1SyncRe
         article.score,
         article.published_at,
         publishedDateJst,
-        serializedEmbedding,
       );
     }
+
+    const sql = `
+INSERT INTO articles (
+  id, title, url, source_name, summary, score, published_at, published_date_jst, embedding
+) VALUES
+  ${valuePlaceholders.join(",\n  ")}
+ON CONFLICT(url) DO UPDATE SET
+  title = excluded.title,
+  source_name = excluded.source_name,
+  summary = excluded.summary,
+  score = excluded.score,
+  published_at = excluded.published_at,
+  published_date_jst = excluded.published_date_jst,
+  embedding = COALESCE(excluded.embedding, articles.embedding);
+`.trim();
 
     try {
       const response = await fetchFn(endpoint, {

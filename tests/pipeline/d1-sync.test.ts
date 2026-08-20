@@ -76,7 +76,7 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     const payload = JSON.parse(init.body);
     expect(payload.sql).toContain("INSERT INTO articles");
     expect(payload.sql).toContain("ON CONFLICT(url) DO UPDATE SET");
-    expect(payload.params.length).toBe(3 * 9); // 3 articles * 9 columns
+    expect(payload.params.length).toBe(3 * 8); // 3 articles * 8 scalar columns (embedding is native hex literal)
   });
 
   it("batchSize に応じて複数回のリクエストに分割して送信されること", async () => {
@@ -106,13 +106,13 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     expect(mockFetch).toHaveBeenCalledTimes(2); // 1回目: 2件, 2回目: 1件
 
     const firstPayload = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(firstPayload.params.length).toBe(2 * 9);
+    expect(firstPayload.params.length).toBe(2 * 8);
 
     const secondPayload = JSON.parse(mockFetch.mock.calls[1][1].body);
-    expect(secondPayload.params.length).toBe(1 * 9);
+    expect(secondPayload.params.length).toBe(1 * 8);
   });
 
-  it("published_date_jst が未指定の場合に自動計算され、embedding (Float32Array) がバイト配列としてシリアライズされること", async () => {
+  it("published_date_jst が未指定の場合に自動計算され、embedding (Float32Array) が SQLite の 16進数 BLOB リテラル (X'...') としてクエリに埋め込まれること", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -142,8 +142,8 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     expect(params[5]).toBe(sampleArticles[0].score);
     expect(params[6]).toBe("2026-08-19T00:00:00.000Z");
     expect(params[7]).toBe("2026-08-19"); // JST: UTC 00:00 + 9h -> 2026-08-19 09:00 -> 2026-08-19
-    expect(Array.isArray(params[8])).toBe(true);
-    expect(params[8].length).toBe(1024 * 4); // 4096 bytes
+    expect(params.length).toBe(8);
+    expect(payload.sql).toMatch(/X'[0-9a-f]{8192}'/i); // 1024 * 4 bytes * 2 hex chars = 8192 chars
   });
 
   it("空の記事配列が渡された場合、リクエストを送信せず total: 0, inserted: 0 を返すこと", async () => {
