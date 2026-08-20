@@ -33,6 +33,7 @@ resource "cloudflare_d1_database" "news_db" {
 resource "cloudflare_workers_script" "site" {
   account_id          = var.cloudflare_account_id
   script_name         = var.worker_name
+  main_module         = "index.js"
   content             = "export default { fetch() { return new Response('ok'); } };"
   compatibility_date  = "2026-08-20"
   compatibility_flags = ["nodejs_compat"]
