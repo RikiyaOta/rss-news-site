@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
@@ -175,18 +175,17 @@ describe("D1 データベーススキーマ & クエリレイヤー (src/server/
     let mockD1: D1DatabaseLike;
 
     beforeEach(() => {
-      sqliteDb = new Database(":memory:");
-      // スキーマの適用
-      const schemaSqlPath = path.resolve(__dirname, "../../src/server/db/schema.sql");
-      if (fs.existsSync(schemaSqlPath)) {
-        const schemaSql = fs.readFileSync(schemaSqlPath, "utf-8");
-        sqliteDb.exec(schemaSql);
+      if (!sqliteDb) {
+        sqliteDb = new Database(":memory:");
+        const schemaSqlPath = path.resolve(__dirname, "../../src/server/db/schema.sql");
+        if (fs.existsSync(schemaSqlPath)) {
+          const schemaSql = fs.readFileSync(schemaSqlPath, "utf-8");
+          sqliteDb.exec(schemaSql);
+        }
+        mockD1 = createMockD1Database(sqliteDb);
+      } else {
+        sqliteDb.exec("DELETE FROM articles;");
       }
-      mockD1 = createMockD1Database(sqliteDb);
-    });
-
-    afterEach(() => {
-      sqliteDb.close();
     });
 
     it("空の記事配列を渡した場合に 0 を返し安全に完了すること", async () => {

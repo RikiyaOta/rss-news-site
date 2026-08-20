@@ -20,6 +20,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      hono:
+        specifier: ^4.13.1
+        version: 4.13.1
       js-yaml:
         specifier: ^4.1.0
         version: 4.3.1
@@ -42,6 +45,9 @@ importers:
         specifier: ^3.0.2
         version: 3.6.0
     devDependencies:
+      '@cloudflare/workers-types':
+        specifier: ^5.20260812.1
+        version: 5.20260812.1
       '@playwright/test':
         specifier: ^1.50.1
         version: 1.62.1
@@ -107,7 +113,7 @@ importers:
         version: 4.1.10(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@30.0.1)(vite@8.2.1(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
       wrangler:
         specifier: ^4.121.0
-        version: 4.121.0
+        version: 4.121.0(@cloudflare/workers-types@5.20260812.1)
 
 packages:
 
@@ -328,6 +334,9 @@ packages:
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
+
+  '@cloudflare/workers-types@5.20260812.1':
+    resolution: {integrity: sha512-eG2aQdUWH8RYEubpBjUE98L2G57JYzGEcI8PgROTjt9YjunbEnPBHP4371Usj8v8pTWcXtbOmI+LRCXF4KhJgQ==}
 
   '@cspotcode/source-map-support@0.8.1':
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
@@ -2046,6 +2055,10 @@ packages:
   has-property-descriptors@1.0.2:
     resolution: {integrity: sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==}
 
+  hono@4.13.1:
+    resolution: {integrity: sha512-kdJoFVv2xmayw6cY09H7AbMJMt8Jn5jdlEdXsP7AGBdF2DIptVlKlOLKXP41yPip4/a3yQPv9gVcJYI8YY04dw==}
+    engines: {node: '>=16.9.0'}
+
   html-encoding-sniffer@6.0.0:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
@@ -3171,6 +3184,8 @@ snapshots:
 
   '@cloudflare/workerd-windows-64@1.20260804.1':
     optional: true
+
+  '@cloudflare/workers-types@5.20260812.1': {}
 
   '@cspotcode/source-map-support@0.8.1':
     dependencies:
@@ -4390,6 +4405,8 @@ snapshots:
     dependencies:
       es-define-property: 1.0.1
 
+  hono@4.13.1: {}
+
   html-encoding-sniffer@6.0.0:
     dependencies:
       '@exodus/bytes': 1.15.1
@@ -5144,7 +5161,7 @@ snapshots:
       '@cloudflare/workerd-linux-arm64': 1.20260804.1
       '@cloudflare/workerd-windows-64': 1.20260804.1
 
-  wrangler@4.121.0:
+  wrangler@4.121.0(@cloudflare/workers-types@5.20260812.1):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
       '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260804.1)
@@ -5155,6 +5172,7 @@ snapshots:
       unenv: 2.0.0-rc.24
       workerd: 1.20260804.1
     optionalDependencies:
+      '@cloudflare/workers-types': 5.20260812.1
       fsevents: 2.3.3
     transitivePeerDependencies:
       - bufferutil
