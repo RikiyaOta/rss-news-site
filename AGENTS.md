@@ -42,17 +42,20 @@
 ## 4. アーキテクチャ & 実装ルール
 
 1. **RSS 収集 & ローカル多言語埋め込みスコアリングパイプライン:**
-   * 外部 LLM API（Gemini 等）を使用せず、ローカルの `intfloat/multilingual-e5-small` 埋め込みモデルを用いてユーザー関心プロファイルとのコサイン類似度から 0〜100 点でスコアリングします。
+   * 外部 LLM API（Gemini 等）を使用せず、ローカルの `BAAI/bge-m3` 埋め込みモデルを用いてユーザー関心プロファイルとのコサイン類似度から 0〜100 点でスコアリングします。
    * RSS 記事のメタデータ（`og:description` / `description`）を抽出してスニペットとして保存します。
-2. **多言語ベクトル埋め込み (`intfloat/multilingual-e5-small`):**
-   * 記事登録（インデックス化）時のテキストには必ず **`"passage: "`** プレフィックスを付与してください。
+   * 記事の公開日時（`published_at`）から日本標準時（JST）の日付（`published_date_jst`）を算出して保存します。
+2. **多言語ベクトル埋め込み (`BAAI/bge-m3`):**
+   * 記事登録（インデックス化）時のテキストには必ず **`"passage: "`** プレフィックスを付与してください（例: `"passage: {title}\n{summary}"`）。
    * 検索クエリのベクトル化時には必ず **`"query: "`** プレフィックスを付与してください。
-   * ベクトルは 384 次元の L2 正規化済み `Float32Array` を扱います。
-3. **SQLite データベース設計:**
-   * 日別記事DB: `data/YYYY-MM-DD.db`（テーブル: `articles`、`idx_articles_score` インデックス）
-   * 全体検索DB: `search_index.db`（テーブル: `search_index`、`article_id`, `date`, `embedding` BLOB）
-4. **Cloudflare R2 & Terraform:**
-   * R2 バケット: `rss-news-site-data`
-   * Terraform の tfstate は R2 バケット `rss-news-site-tfstate` で S3 互換バックエンドとして管理します。
-5. **GitHub Actions セキュリティ:**
+   * ベクトルは 1024 次元の L2 正規化済み `Float32Array`（BLOB 4096バイト）を扱います。
+3. **Cloudflare D1 データベース設計:**
+   * テーブル: `articles` (`id` PK, `title`, `url` UNIQUE, `source_name`, `summary`, `score`, `published_at`, `published_date_jst`, `embedding` BLOB, `created_at`)
+   * インデックス: `idx_articles_jst_score` (`published_date_jst, score DESC`), `idx_articles_url` (`url`), `idx_articles_score` (`score DESC`)
+4. **Cloudflare Workers & Hono API:**
+   * Cloudflare Workers（Static Assets + Hono）によるエッジ API / フロントエンド配信。
+   * `/api/articles?date=YYYY-MM-DD`: `published_date_jst` 基準の日別記事一覧（スコア降順）。
+   * `/api/search?q=...`: Workers AI (`@cf/baai/bge-m3`) によるクエリベクトル化と D1 全記事ベクトル類似度検索。
+5. **Terraform & GitHub Actions セキュリティ:**
+   * Terraform による Cloudflare D1 / Pages インフラのコード管理（tfstate は R2 バケット `rss-news-site-tfstate` で管理）。
    * すべてのサードパーティ GitHub Action は `pinact` を使用してコミットハッシュ（SHA-1）で固定してください。
