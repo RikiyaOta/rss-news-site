@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
-describe("Terraform による Cloudflare D1 & Workers インフラ定義の検証", () => {
+describe("Terraform による Cloudflare D1 データベースインフラ定義の検証", () => {
   const rootDir = path.resolve(__dirname, "..");
   const tfDir = path.join(rootDir, "terraform");
 
@@ -34,6 +34,14 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(fs.existsSync(mainPath)).toBe(true);
     });
 
+    it("Terraform と Wrangler の責務分離方針 (Cloudflare Best Practice) に関するアーキテクチャ設計コメントが明記されていること", () => {
+      const mainPath = path.join(tfDir, "main.tf");
+      const content = fs.readFileSync(mainPath, "utf-8");
+
+      expect(content).toContain("Architecture Design Note: Terraform & Wrangler 責務分離方針");
+      expect(content).toContain("Wrangler の責務 (`wrangler.jsonc`)");
+    });
+
     it("terraform および cloudflare プロバイダーの設定が正しく定義されていること", () => {
       const mainPath = path.join(tfDir, "main.tf");
       const content = fs.readFileSync(mainPath, "utf-8");
@@ -53,55 +61,15 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/read_replication\s*=\s*\{\s*mode\s*=\s*"disabled"\s*\}/);
     });
 
-    it("Cloudflare Zones データソース (data.cloudflare_zones.primary) が正しく定義されていること", () => {
+    it("アプリケーション層 (Worker / Pages / R2) は Wrangler 側で一元管理され、Terraform に重複定義されていないこと", () => {
       const mainPath = path.join(tfDir, "main.tf");
       const content = fs.readFileSync(mainPath, "utf-8");
 
-      expect(content).toMatch(/data\s+"cloudflare_zones"\s+"primary"/);
-      expect(content).toMatch(/name\s*=\s*var\.zone_name/);
-    });
-
-    it("Cloudflare Workers スクリプト本体 (cloudflare_workers_script.site) と D1/AI バインディングが正しく定義されていること", () => {
-      const mainPath = path.join(tfDir, "main.tf");
-      const content = fs.readFileSync(mainPath, "utf-8");
-
-      expect(content).toMatch(/resource\s+"cloudflare_workers_script"\s+"site"/);
-      expect(content).toMatch(/script_name\s*=\s*var\.worker_name/);
-      expect(content).toMatch(/main_module\s*=\s*"index\.js"/);
-      expect(content).toMatch(/compatibility_flags\s*=\s*\["nodejs_compat"\]/);
-      expect(content).toMatch(/name\s*=\s*"DB"/);
-      expect(content).toMatch(/type\s*=\s*"d1"/);
-      expect(content).toMatch(/name\s*=\s*"AI"/);
-      expect(content).toMatch(/type\s*=\s*"ai"/);
-      expect(content).toMatch(/ignore_changes\s*=\s*\[content,\s*assets\]/);
-    });
-
-    it("Cloudflare Workers カスタムドメインリソース (cloudflare_workers_custom_domain.custom) が正しく定義されていること", () => {
-      const mainPath = path.join(tfDir, "main.tf");
-      const content = fs.readFileSync(mainPath, "utf-8");
-
-      expect(content).toMatch(/resource\s+"cloudflare_workers_custom_domain"\s+"custom"/);
-      expect(content).toMatch(/account_id\s*=\s*var\.cloudflare_account_id/);
-      expect(content).toMatch(/hostname\s*=\s*var\.custom_domain/);
-      expect(content).toMatch(/service\s*=\s*cloudflare_workers_script\.site\.script_name/);
-      expect(content).toMatch(/zone_id\s*=\s*local\.zone_id/);
-    });
-
-    it("不要になった Cloudflare R2 バケットおよび関連リソースが定義されていないこと", () => {
-      const mainPath = path.join(tfDir, "main.tf");
-      const content = fs.readFileSync(mainPath, "utf-8");
-
-      expect(content).not.toMatch(/resource\s+"cloudflare_r2_bucket"/);
-      expect(content).not.toMatch(/resource\s+"cloudflare_r2_managed_domain"/);
-      expect(content).not.toMatch(/resource\s+"cloudflare_r2_bucket_cors"/);
-    });
-
-    it("不要になった Cloudflare Pages リソースが定義されていないこと", () => {
-      const mainPath = path.join(tfDir, "main.tf");
-      const content = fs.readFileSync(mainPath, "utf-8");
-
+      expect(content).not.toMatch(/resource\s+"cloudflare_workers_script"/);
+      expect(content).not.toMatch(/resource\s+"cloudflare_workers_custom_domain"/);
       expect(content).not.toMatch(/resource\s+"cloudflare_pages_project"/);
       expect(content).not.toMatch(/resource\s+"cloudflare_pages_domain"/);
+      expect(content).not.toMatch(/resource\s+"cloudflare_r2_bucket"/);
     });
   });
 
@@ -119,14 +87,6 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/type\s*=\s*string/);
     });
 
-    it("zone_name 変数がデフォルト値 'rikiyaota.kyoto' で定義されていること", () => {
-      const varsPath = path.join(tfDir, "variables.tf");
-      const content = fs.readFileSync(varsPath, "utf-8");
-
-      expect(content).toMatch(/variable\s+"zone_name"/);
-      expect(content).toMatch(/default\s*=\s*"rikiyaota\.kyoto"/);
-    });
-
     it("d1_database_name 変数がデフォルト値 'rss-news-db' で定義されていること", () => {
       const varsPath = path.join(tfDir, "variables.tf");
       const content = fs.readFileSync(varsPath, "utf-8");
@@ -136,29 +96,14 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/type\s*=\s*string/);
     });
 
-    it("worker_name 変数がデフォルト値 'rss-news-site' で定義されていること", () => {
+    it("不要になった Worker、Pages、R2 関連変数が定義されていないこと", () => {
       const varsPath = path.join(tfDir, "variables.tf");
       const content = fs.readFileSync(varsPath, "utf-8");
 
-      expect(content).toMatch(/variable\s+"worker_name"/);
-      expect(content).toMatch(/default\s*=\s*"rss-news-site"/);
-    });
-
-    it("custom_domain 変数がデフォルト値 'rss-news.rikiyaota.kyoto' で定義されていること", () => {
-      const varsPath = path.join(tfDir, "variables.tf");
-      const content = fs.readFileSync(varsPath, "utf-8");
-
-      expect(content).toMatch(/variable\s+"custom_domain"/);
-      expect(content).toMatch(/default\s*=\s*"rss-news\.rikiyaota\.kyoto"/);
-    });
-
-    it("不要になった Pages および R2 関連変数が定義されていないこと", () => {
-      const varsPath = path.join(tfDir, "variables.tf");
-      const content = fs.readFileSync(varsPath, "utf-8");
-
+      expect(content).not.toMatch(/variable\s+"worker_name"/);
+      expect(content).not.toMatch(/variable\s+"custom_domain"/);
       expect(content).not.toMatch(/variable\s+"pages_project_name"/);
       expect(content).not.toMatch(/variable\s+"r2_data_bucket_name"/);
-      expect(content).not.toMatch(/variable\s+"r2_cors_allowed_origins"/);
     });
   });
 
@@ -184,30 +129,14 @@ describe("Terraform による Cloudflare D1 & Workers インフラ定義の検�
       expect(content).toMatch(/value\s*=\s*cloudflare_d1_database\.news_db\.name/);
     });
 
-    it("worker_name 出力が定義されていること", () => {
+    it("不要になった Worker、Pages、R2 関連出力が定義されていないこと", () => {
       const outputsPath = path.join(tfDir, "outputs.tf");
       const content = fs.readFileSync(outputsPath, "utf-8");
 
-      expect(content).toMatch(/output\s+"worker_name"/);
-      expect(content).toMatch(/value\s*=\s*var\.worker_name/);
-    });
-
-    it("custom_domain 出力が定義されていること", () => {
-      const outputsPath = path.join(tfDir, "outputs.tf");
-      const content = fs.readFileSync(outputsPath, "utf-8");
-
-      expect(content).toMatch(/output\s+"custom_domain"/);
-      expect(content).toMatch(/value\s*=\s*var\.custom_domain/);
-    });
-
-    it("不要になった Pages および R2 関連出力が定義されていないこと", () => {
-      const outputsPath = path.join(tfDir, "outputs.tf");
-      const content = fs.readFileSync(outputsPath, "utf-8");
-
+      expect(content).not.toMatch(/output\s+"worker_name"/);
+      expect(content).not.toMatch(/output\s+"custom_domain"/);
       expect(content).not.toMatch(/output\s+"pages_project_name"/);
-      expect(content).not.toMatch(/output\s+"pages_subdomain"/);
       expect(content).not.toMatch(/output\s+"r2_bucket_name"/);
-      expect(content).not.toMatch(/output\s+"r2_public_url"/);
     });
   });
 });

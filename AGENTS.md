@@ -56,6 +56,7 @@
    * Cloudflare Workers（Static Assets + Hono）によるエッジ API / フロントエンド配信。
    * `/api/articles?date=YYYY-MM-DD`: `published_date_jst` 基準の日別記事一覧（スコア降順）。
    * `/api/search?q=...`: Workers AI (`@cf/baai/bge-m3`) によるクエリベクトル化と D1 全記事ベクトル類似度検索。
-5. **Terraform & GitHub Actions セキュリティ:**
-   * Terraform による Cloudflare D1 / Pages インフラのコード管理（tfstate は R2 バケット `rss-news-site-tfstate` で管理）。
+5. **Terraform & Wrangler 責務分離方針 (Cloudflare Best Practice):**
+   * **Terraform の責務:** 永続インフラ・長寿命リソースである Cloudflare D1 データベース（`rss-news-db`）の作成とライフサイクル管理に専念（tfstate は R2 バケット `rss-news-site-tfstate` で管理）。
+   * **Wrangler の責務 (`wrangler.jsonc`):** アプリケーションコード（Hono）、React SPA 静的アセット、D1 / Workers AI バインディング、カスタムドメインのルーティングを一元管理。Worker 本体を Terraform 側に重複定義しない。
    * すべてのサードパーティ GitHub Action は `pinact` を使用してコミットハッシュ（SHA-1）で固定してください。

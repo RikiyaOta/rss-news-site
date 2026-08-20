@@ -10,32 +10,8 @@ variable "cloudflare_api_token" {
   default     = null
 }
 
-variable "zone_name" {
-  description = "Apex domain zone name"
-  type        = string
-  default     = "rikiyaota.kyoto"
-}
-
-variable "cloudflare_zone_id" {
-  description = "Cloudflare Zone ID (optional fallback)"
-  type        = string
-  default     = null
-}
-
 variable "d1_database_name" {
   description = "Cloudflare D1 database name"
   type        = string
   default     = "rss-news-db"
-}
-
-variable "worker_name" {
-  description = "Cloudflare Worker service name"
-  type        = string
-  default     = "rss-news-site"
-}
-
-variable "custom_domain" {
-  description = "Custom domain for Cloudflare Worker"
-  type        = string
-  default     = "rss-news.rikiyaota.kyoto"
 }
