@@ -6,12 +6,6 @@
   "compatibility_flags": [
     "nodejs_compat"
   ],
-  "routes": [
-    {
-      "pattern": "rss-news.rikiyaota.kyoto",
-      "custom_domain": true
-    }
-  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS"
