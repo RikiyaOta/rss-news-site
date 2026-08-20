@@ -70,6 +70,21 @@ export function normalizeFeedItem(item: any, sourceName: string): RawArticle {
 }
 
 /**
+ * 指定された日時が基準日時から maxDays 日以内であるかを判定する（過去アーカイブ除外）
+ */
+export function isWithinDays(
+  isoDateStr: string,
+  maxDays = 3,
+  referenceDate: Date = new Date(),
+): boolean {
+  if (!isoDateStr) return true;
+  const date = new Date(isoDateStr);
+  if (isNaN(date.getTime())) return true;
+  const cutoff = new Date(referenceDate.getTime() - maxDays * 24 * 60 * 60 * 1000);
+  return date.getTime() >= cutoff.getTime();
+}
+
+/**
  * HTML 文字列から og:description または meta description を抽出する
  */
 export function extractMetaDescription(html: string): string {
@@ -131,15 +146,15 @@ export async function fetchFeedArticles(
   source: FeedSource,
   parser: Parser = defaultParser,
   customFetch?: typeof fetch,
+  maxAgeDays = 3,
 ): Promise<RawArticle[]> {
   try {
     const feed = await parser.parseURL(source.url);
     const rawItems = feed?.items ?? [];
-    // 1フィードあたり最新30件に制限
-    const items = rawItems.slice(0, 30);
-    const articles = items
+    const articles = rawItems
       .map((item) => normalizeFeedItem(item, source.name))
-      .filter((article) => Boolean(article.url && article.url.trim()));
+      .filter((article) => Boolean(article.url && article.url.trim()))
+      .filter((article) => isWithinDays(article.published_at, maxAgeDays));
 
     // snippet が空の記事について og:description の補完を試行
     for (const article of articles) {

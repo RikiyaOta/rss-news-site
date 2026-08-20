@@ -4,6 +4,7 @@ import {
   generateArticleId,
   normalizeFeedItem,
   fetchFeedArticles,
+  isWithinDays,
   extractMetaDescription,
   fetchPageDescription,
   type RawArticle,
@@ -251,6 +252,39 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
       expect(articles[1].source_name).toBe("Test Feed");
     });
 
+    it("公開日時が直近 3 日より古い過去アーカイブ記事を適切に除外すること", async () => {
+      const source: FeedSource = {
+        name: "Test Feed",
+        url: "https://example.com/feed.xml",
+      };
+
+      const now = new Date();
+      const recentDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000).toISOString(); // 1日前
+      const oldDate = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString(); // 10日前
+
+      mockParser.parseURL.mockResolvedValue({
+        items: [
+          {
+            title: "直近の記事",
+            link: "https://example.com/recent",
+            contentSnippet: "概要",
+            isoDate: recentDate,
+          },
+          {
+            title: "10日前の古い記事",
+            link: "https://example.com/old",
+            contentSnippet: "概要",
+            isoDate: oldDate,
+          },
+        ],
+      });
+
+      const articles = await fetchFeedArticles(source, mockParser, undefined, 3);
+
+      expect(articles).toHaveLength(1);
+      expect(articles[0].title).toBe("直近の記事");
+    });
+
     it("URLが空または未指定の無効なフィードアイテムを除外して有効な記事のみを返却すること", async () => {
       const source: FeedSource = {
         name: "Test Feed",
@@ -470,6 +504,31 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
       const failingFetch: typeof fetch = vi.fn().mockRejectedValue(new Error("Network timeout"));
       const desc = await fetchPageDescription("https://example.com/timeout", failingFetch);
       expect(desc).toBe("");
+    });
+  });
+
+  describe("isWithinDays", () => {
+    it("直近 3 日以内の日付に対して true を返すこと", () => {
+      const now = new Date("2026-08-20T12:00:00.000Z");
+      const date1DayAgo = "2026-08-19T12:00:00.000Z";
+      const date3DaysAgo = "2026-08-17T12:00:00.000Z";
+
+      expect(isWithinDays(date1DayAgo, 3, now)).toBe(true);
+      expect(isWithinDays(date3DaysAgo, 3, now)).toBe(true);
+    });
+
+    it("3日より古い過去の日付に対して false を返すこと", () => {
+      const now = new Date("2026-08-20T12:00:00.000Z");
+      const date4DaysAgo = "2026-08-16T11:59:59.000Z";
+      const date1YearAgo = "2025-08-20T12:00:00.000Z";
+
+      expect(isWithinDays(date4DaysAgo, 3, now)).toBe(false);
+      expect(isWithinDays(date1YearAgo, 3, now)).toBe(false);
+    });
+
+    it("日付文字列が空または無効な場合は安全に true を返すこと（最新扱い）", () => {
+      expect(isWithinDays("", 3)).toBe(true);
+      expect(isWithinDays("invalid-date-string", 3)).toBe(true);
     });
   });
 });
