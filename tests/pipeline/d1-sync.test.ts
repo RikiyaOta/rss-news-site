@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { syncArticlesToD1, D1SyncOptions } from "../../src/pipeline/d1-sync";
-import { ArticleInput } from "../../src/server/db/articles";
+import Database from "better-sqlite3";
+import { syncArticlesToD1, D1SyncOptions, SCHEMA_STATEMENTS } from "../../src/pipeline/d1-sync";
+import { ArticleInput, deserializeVector } from "../../src/server/db/articles";
 
 describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテスト", () => {
   const sampleArticles: ArticleInput[] = [
@@ -77,6 +78,122 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     expect(payload.sql).toContain("INSERT INTO articles");
     expect(payload.sql).toContain("ON CONFLICT(url) DO UPDATE SET");
     expect(payload.params.length).toBe(3 * 8); // 3 articles * 8 scalar columns (embedding is native hex literal)
+  });
+
+  it("生成された D1 /raw SQL とパラメータが実際の SQLite エンジンで構文エラーなく実行され、BLOB ベクトルが正確に復元できること", async () => {
+    let capturedSql = "";
+    let capturedParams: any[] = [];
+
+    const mockFetch = vi.fn().mockImplementation((_url, init) => {
+      const body = JSON.parse(init.body);
+      capturedSql = body.sql;
+      capturedParams = body.params;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      });
+    });
+
+    const options: D1SyncOptions = {
+      accountId: "acc-test",
+      databaseId: "db-test",
+      apiToken: "tok-test",
+      articles: sampleArticles,
+      customFetch: mockFetch as any,
+    };
+
+    await syncArticlesToD1(options);
+
+    // 実際の SQLite (インメモリ) で実行して検証
+    const db = new Database(":memory:");
+    try {
+      db.exec(SCHEMA_STATEMENTS);
+
+      // capturedSql を実行（パラメータバインド）
+      const stmt = db.prepare(capturedSql);
+      stmt.run(...capturedParams);
+
+      // レコード検証
+      const rows = db.prepare("SELECT * FROM articles ORDER BY score DESC").all() as any[];
+      expect(rows).toHaveLength(3);
+      expect(rows[0].title).toBe("Cloudflare D1 と Hono によるエッジAPI設計");
+      expect(rows[0].score).toBe(92);
+
+      // BLOB の検証
+      expect(Buffer.isBuffer(rows[0].embedding)).toBe(true);
+      expect(rows[0].embedding.length).toBe(1024 * 4); // 4096 bytes
+
+      // ベクトルの復元検証
+      const restoredVector = deserializeVector(rows[0].embedding);
+      expect(restoredVector).toHaveLength(1024);
+      expect(restoredVector[0]).toBeCloseTo(0.1, 5);
+      expect(restoredVector[1023]).toBeCloseTo(0.1, 5);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("ON CONFLICT(url) による既存記事の更新が実際の SQLite エンジンで正しく動作すること", async () => {
+    let capturedSql = "";
+    let capturedParams: any[] = [];
+
+    const mockFetch = vi.fn().mockImplementation((_url, init) => {
+      const body = JSON.parse(init.body);
+      capturedSql = body.sql;
+      capturedParams = body.params;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      });
+    });
+
+    const updatedArticle: ArticleInput = {
+      ...sampleArticles[0],
+      title: "TypeScript 5.8 の最新機能解説 (更新版)",
+      score: 99,
+    };
+
+    await syncArticlesToD1({
+      accountId: "acc-test",
+      databaseId: "db-test",
+      apiToken: "tok-test",
+      articles: [updatedArticle],
+      customFetch: mockFetch as any,
+    });
+
+    const db = new Database(":memory:");
+    try {
+      db.exec(SCHEMA_STATEMENTS);
+      // 初回挿入
+      const initialInsert = db.prepare(
+        "INSERT INTO articles (id, title, url, source_name, summary, score, published_at, published_date_jst) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      );
+      initialInsert.run(
+        sampleArticles[0].id,
+        sampleArticles[0].title,
+        sampleArticles[0].url,
+        sampleArticles[0].source_name,
+        sampleArticles[0].summary,
+        sampleArticles[0].score,
+        sampleArticles[0].published_at,
+        "2026-08-19",
+      );
+
+      // syncArticlesToD1 が生成した UPSERT SQL を実行
+      const stmt = db.prepare(capturedSql);
+      stmt.run(...capturedParams);
+
+      const rows = db
+        .prepare("SELECT * FROM articles WHERE url = ?")
+        .all(sampleArticles[0].url) as any[];
+      expect(rows).toHaveLength(1);
+      expect(rows[0].title).toBe("TypeScript 5.8 の最新機能解説 (更新版)");
+      expect(rows[0].score).toBe(99);
+    } finally {
+      db.close();
+    }
   });
 
   it("batchSize に応じて複数回のリクエストに分割して送信されること", async () => {
