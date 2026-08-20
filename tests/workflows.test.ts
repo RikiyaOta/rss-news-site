@@ -179,6 +179,7 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
 
       expect(content).toContain("pnpm build");
       expect(content).toContain("wrangler deploy");
+      expect(content).toMatch(/wrangler\s+d1\s+(execute|migrations)/);
       expect(content).toMatch(/terraform\s+init/);
       expect(content).toMatch(/terraform\s+apply/);
     });
