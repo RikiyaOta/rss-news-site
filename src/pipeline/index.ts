@@ -216,6 +216,9 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     });
 
     console.log(`  ✨ D1 同期完了: ${d1SyncResult.inserted}/${d1SyncResult.total} 件 挿入・更新`);
+    if (d1SyncResult.errors && d1SyncResult.errors.length > 0) {
+      console.error("  ❌ D1 同期エラー詳細:", JSON.stringify(d1SyncResult.errors, null, 2));
+    }
   }
 
   console.log(`\n========================================`);
