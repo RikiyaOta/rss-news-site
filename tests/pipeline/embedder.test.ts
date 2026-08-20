@@ -119,8 +119,8 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
     it("引数なしで呼び出した場合に @huggingface/transformers の pipeline で BAAI/bge-m3 を初期化すること", async () => {
       const extractor = await getExtractor();
 
-      expect(pipeline).toHaveBeenCalledWith("feature-extraction", "BAAI/bge-m3", {
-        dtype: "fp32",
+      expect(pipeline).toHaveBeenCalledWith("feature-extraction", "Xenova/bge-m3", {
+        dtype: "fp16",
       });
       expect(extractor).toBe(mockDefaultExtractor);
     });
@@ -131,8 +131,8 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
 
       const extractor = await getExtractor(mockPipelineFactory);
 
-      expect(mockPipelineFactory).toHaveBeenCalledWith("feature-extraction", "BAAI/bge-m3", {
-        dtype: "fp32",
+      expect(mockPipelineFactory).toHaveBeenCalledWith("feature-extraction", "Xenova/bge-m3", {
+        dtype: "fp16",
       });
       expect(extractor).toBe(mockPipelineInstance);
     });
@@ -210,8 +210,8 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
     it("extractorInstance が省略された場合に getExtractor から取得したインスタンスを使用すること", async () => {
       const embedding = await generateArticleEmbedding("タイトル", "要約");
 
-      expect(pipeline).toHaveBeenCalledWith("feature-extraction", "BAAI/bge-m3", {
-        dtype: "fp32",
+      expect(pipeline).toHaveBeenCalledWith("feature-extraction", "Xenova/bge-m3", {
+        dtype: "fp16",
       });
       expect(mockDefaultExtractor).toHaveBeenCalledWith("passage: タイトル\n要約", {
         pooling: "mean",

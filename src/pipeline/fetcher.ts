@@ -13,7 +13,9 @@ export interface RawArticle {
 
 const defaultParser = new Parser({
   headers: {
-    "User-Agent": "rss-news-site-bot/1.0 (+https://github.com/RikiyaOta/rss-news-site)",
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
   },
   timeout: 10000,
 });
@@ -68,6 +70,21 @@ export function normalizeFeedItem(item: any, sourceName: string): RawArticle {
 }
 
 /**
+ * 指定された日時が基準日時から maxDays 日以内であるかを判定する（過去アーカイブ除外）
+ */
+export function isWithinDays(
+  isoDateStr: string,
+  maxDays = 3,
+  referenceDate: Date = new Date(),
+): boolean {
+  if (!isoDateStr) return true;
+  const date = new Date(isoDateStr);
+  if (isNaN(date.getTime())) return true;
+  const cutoff = new Date(referenceDate.getTime() - maxDays * 24 * 60 * 60 * 1000);
+  return date.getTime() >= cutoff.getTime();
+}
+
+/**
  * HTML 文字列から og:description または meta description を抽出する
  */
 export function extractMetaDescription(html: string): string {
@@ -111,7 +128,7 @@ export async function fetchPageDescription(
       signal: controller.signal,
       headers: {
         "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         Accept: "text/html,application/xhtml+xml",
       },
     });
@@ -129,13 +146,15 @@ export async function fetchFeedArticles(
   source: FeedSource,
   parser: Parser = defaultParser,
   customFetch?: typeof fetch,
+  maxAgeDays = 3,
 ): Promise<RawArticle[]> {
   try {
     const feed = await parser.parseURL(source.url);
-    const items = feed?.items ?? [];
-    const articles = items
+    const rawItems = feed?.items ?? [];
+    const articles = rawItems
       .map((item) => normalizeFeedItem(item, source.name))
-      .filter((article) => Boolean(article.url && article.url.trim()));
+      .filter((article) => Boolean(article.url && article.url.trim()))
+      .filter((article) => isWithinDays(article.published_at, maxAgeDays));
 
     // snippet が空の記事について og:description の補完を試行
     for (const article of articles) {
