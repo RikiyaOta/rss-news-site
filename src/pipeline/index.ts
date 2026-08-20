@@ -5,7 +5,7 @@ import { loadConfig } from "./config";
 import { fetchFeedArticles, RawArticle } from "./fetcher";
 import { scoreArticleWithProfile, precomputeInterestVectors } from "./scorer";
 import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
-import { syncArticlesToD1, D1SyncResult } from "./d1-sync";
+import { syncArticlesToD1, ensureD1Schema, D1SyncResult } from "./d1-sync";
 import { initLocalDatabase, upsertArticlesLocal } from "./db";
 
 export interface PipelineOptions {
@@ -142,6 +142,11 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   const apiToken = options.apiToken || process.env.CLOUDFLARE_API_TOKEN;
 
   if (!skipD1Sync && accountId && databaseId && apiToken && processedArticles.length > 0) {
+    try {
+      await ensureD1Schema({ accountId, databaseId, apiToken, customFetch });
+    } catch (schemaErr: any) {
+      console.warn("D1 スキーマ初期化スキップまたは警告:", schemaErr?.message);
+    }
     console.log(`[3/3] Cloudflare D1 (${databaseId}) へ記事を同期中...`);
     d1SyncResult = await syncArticlesToD1({
       accountId,

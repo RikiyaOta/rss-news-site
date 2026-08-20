@@ -215,4 +215,29 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     expect(result.errors).toBeDefined();
     expect(result.errors?.length).toBeGreaterThan(0);
   });
+
+  it("ensureD1Schema が D1 REST API に CREATE TABLE / INDEX 文を送信すること", async () => {
+    const { ensureD1Schema } = await import("../../src/pipeline/d1-sync");
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true }),
+    });
+
+    await ensureD1Schema({
+      accountId: "acc-123",
+      databaseId: "db-456",
+      apiToken: "token-789",
+      customFetch: mockFetch as any,
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe(
+      "https://api.cloudflare.com/client/v4/accounts/acc-123/d1/database/db-456/raw",
+    );
+    const payload = JSON.parse(init.body);
+    expect(payload.sql).toContain("CREATE TABLE IF NOT EXISTS articles");
+    expect(payload.sql).toContain("CREATE INDEX IF NOT EXISTS idx_articles_jst_score");
+  });
 });

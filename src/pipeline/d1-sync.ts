@@ -15,6 +15,24 @@ export interface D1SyncResult {
   errors?: any[];
 }
 
+export const SCHEMA_STATEMENTS = `
+CREATE TABLE IF NOT EXISTS articles (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  url TEXT NOT NULL UNIQUE,
+  source_name TEXT NOT NULL,
+  summary TEXT,
+  score REAL NOT NULL,
+  published_at TEXT NOT NULL,
+  published_date_jst TEXT NOT NULL,
+  embedding BLOB,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_articles_jst_score ON articles(published_date_jst, score DESC);
+CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
+CREATE INDEX IF NOT EXISTS idx_articles_score ON articles(score DESC);
+`.trim();
+
 const UPSERT_STATEMENT = `
 INSERT INTO articles (
   id, title, url, source_name, summary, score, published_at, published_date_jst, embedding
@@ -28,6 +46,31 @@ ON CONFLICT(url) DO UPDATE SET
   published_date_jst = excluded.published_date_jst,
   embedding = COALESCE(excluded.embedding, articles.embedding);
 `.trim();
+
+/**
+ * Cloudflare D1 のテーブルおよびインデックススキーマを自動作成・初期化する
+ */
+export async function ensureD1Schema(
+  options: Pick<D1SyncOptions, "accountId" | "databaseId" | "apiToken" | "customFetch">,
+): Promise<void> {
+  const { accountId, databaseId, apiToken } = options;
+  const fetchFn = options.customFetch ?? fetch;
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/raw`;
+
+  const response = await fetchFn(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ sql: SCHEMA_STATEMENTS }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`D1 スキーマ初期化失敗: ${response.status} ${errorText}`);
+  }
+}
 
 /**
  * Cloudflare D1 REST API (/raw) を用いて記事データをバッチ同期 (UPSERT) する
