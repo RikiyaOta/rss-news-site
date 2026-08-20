@@ -12,34 +12,9 @@ provider "cloudflare" {
   api_token = var.cloudflare_api_token
 }
 
-resource "cloudflare_r2_bucket" "data" {
+resource "cloudflare_d1_database" "news_db" {
   account_id = var.cloudflare_account_id
-  name       = var.r2_data_bucket_name
-  location   = "APAC"
-}
-
-resource "cloudflare_r2_managed_domain" "data" {
-  account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.data.name
-  enabled     = true
-}
-
-resource "cloudflare_r2_bucket_cors" "data" {
-  account_id  = var.cloudflare_account_id
-  bucket_name = cloudflare_r2_bucket.data.name
-
-  rules = [
-    {
-      id = "Allow Web Access"
-      allowed = {
-        methods = ["GET", "HEAD"]
-        origins = var.r2_cors_allowed_origins
-        headers = ["*"]
-      }
-      expose_headers  = ["Content-Type", "Content-Length", "ETag"]
-      max_age_seconds = 86400
-    }
-  ]
+  name       = var.d1_database_name
 }
 
 resource "cloudflare_pages_project" "site" {

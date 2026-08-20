@@ -1,6 +1,11 @@
-output "r2_bucket_name" {
-  description = "Cloudflare R2 data bucket name"
-  value       = cloudflare_r2_bucket.data.name
+output "d1_database_id" {
+  description = "Cloudflare D1 database ID"
+  value       = cloudflare_d1_database.news_db.id
+}
+
+output "d1_database_name" {
+  description = "Cloudflare D1 database name"
+  value       = cloudflare_d1_database.news_db.name
 }
 
 output "pages_project_name" {
@@ -16,9 +21,4 @@ output "pages_subdomain" {
 output "custom_domain" {
   description = "Cloudflare Pages custom domain"
   value       = cloudflare_pages_domain.custom.name
-}
-
-output "r2_public_url" {
-  description = "Public URL for the R2 data bucket"
-  value       = "https://${cloudflare_r2_managed_domain.data.domain}"
 }
