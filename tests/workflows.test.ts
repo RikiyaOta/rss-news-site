@@ -54,16 +54,12 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
 
     it("pinact による静的検証 (pinact run -fix=false -no-api) がパスすること", () => {
       try {
-        execSync("pinact run -fix=false -no-api .github/workflows/*.yml", {
+        execSync("mise exec -- pinact run -fix=false -no-api .github/workflows/*.yml", {
           cwd: rootDir,
           stdio: "pipe",
         });
       } catch (error: any) {
         const stderr = error.stderr?.toString() || error.message;
-        // mise / pinact がローカルテスト環境（コンテナ環境等）に存在しない場合はスキップする
-        if (stderr.includes("not found") || stderr.includes("ENOENT")) {
-          return;
-        }
         throw new Error(`pinact による検証に失敗しました: ${stderr}`);
       }
     });
