@@ -1291,7 +1291,7 @@ git commit -m "feat: Cloudflare R2 および Pages を管理する Terraform 設
 
 **Files:**
 - Create: `.github/workflows/ci.yml`
-- Create: `.github/workflows/daily-pipeline.yml`
+- Create: `.github/workflows/fetch-and-score-pipeline.yml`
 - Create: `.github/workflows/e2e-daily.yml`
 - Create: `.github/workflows/terraform.yml`
 - Create: `.github/workflows/deploy-pages.yml`
@@ -1327,7 +1327,7 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 ```
 
-- [ ] **Step 2: `daily-pipeline.yml`（毎日 07:00 JST / 22:00 UTC）を作成**
+- [ ] **Step 2: `fetch-and-score-pipeline.yml`（実行スケジュールはワークフローファイルを参照）を作成**
 - [ ] **Step 3: `e2e-daily.yml`（毎朝 09:00 JST / 00:00 UTC）を作成**
 - [ ] **Step 4: `terraform.yml` & `deploy-pages.yml` を作成**
 - [ ] **Step 5: `pinact run .github/workflows/*.yml` を実行しコミットハッシュを固定**

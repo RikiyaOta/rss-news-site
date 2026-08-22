@@ -164,7 +164,7 @@ CREATE INDEX IF NOT EXISTS idx_search_index_date ON search_index(date);
    * 型チェック (`tsc --noEmit`)
    * ユニット・統合テスト (`vitest run --coverage`)
    * **GitHub Step Summary にカバレッジレポート（テーブル形式）を出力**
-2. **`daily-pipeline.yml` (毎日 07:00 JST 定期実行 & 手動実行):**
+2. **`fetch-and-score-pipeline.yml` (定期実行 & 手動実行、スケジュールは `.github/workflows/fetch-and-score-pipeline.yml` を参照):**
    * RSS収集・Gemini要約・ベクトル化・R2アップロードを実行
 3. **`e2e-daily.yml` (毎朝 09:00 JST 定期実行):**
    * Playwright による E2E テスト実行（PR 時の CI 負荷を回避）

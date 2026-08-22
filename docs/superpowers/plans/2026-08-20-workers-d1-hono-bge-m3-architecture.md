@@ -114,7 +114,7 @@
 **Files:**
 - Create: `src/pipeline/d1-sync.ts`
 - Modify: `src/pipeline/index.ts`
-- Modify: `.github/workflows/daily-pipeline.yml`
+- Modify: `.github/workflows/fetch-and-score-pipeline.yml`
 - Test: `tests/pipeline/pipeline.test.ts`
 - Test: `tests/workflows.test.ts`
 
@@ -124,7 +124,7 @@
 
 - [ ] **Step 1: D1 同期パイプラインの失敗するテストを作成**
 - [ ] **Step 2: テストを実行して失敗することを確認 (`pnpm vitest run tests/pipeline/pipeline.test.ts`)**
-- [ ] **Step 3: `d1-sync.ts` を実装し、`pipeline/index.ts` および `daily-pipeline.yml` を D1 同期に切り替え**
+- [ ] **Step 3: `d1-sync.ts` を実装し、`pipeline/index.ts` および `fetch-and-score-pipeline.yml` を D1 同期に切り替え**
 - [ ] **Step 4: テストを実行して合格することを確認**
 - [ ] **Step 5: コミット (`git commit -m "feat(pipeline): sync articles directly to Cloudflare D1 and remove R2 pipeline"`)**
 

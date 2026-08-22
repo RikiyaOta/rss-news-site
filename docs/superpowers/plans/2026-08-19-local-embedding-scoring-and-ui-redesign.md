@@ -413,7 +413,7 @@ git commit -m "feat(pipeline): add og:description metadata enrichment for RSS ar
 - Delete: `tests/pipeline/gemini.test.ts`
 - Modify: `tests/pipeline/pipeline.test.ts`
 - Modify: `package.json`
-- Modify: `.github/workflows/daily-pipeline.yml`
+- Modify: `.github/workflows/fetch-and-score-pipeline.yml`
 
 **Interfaces:**
 - Consumes: `src/pipeline/scorer.ts`, `src/pipeline/fetcher.ts`, `src/pipeline/db.ts`, `src/pipeline/storage.ts`
@@ -443,7 +443,7 @@ Expected: PASS
 
 Run: `rm -f src/pipeline/gemini.ts tests/pipeline/gemini.test.ts`
 
-- [ ] **Step 5: `.github/workflows/daily-pipeline.yml` から `GEMINI_API_KEY` を削除**
+- [ ] **Step 5: `.github/workflows/fetch-and-score-pipeline.yml` から `GEMINI_API_KEY` を削除**
 
 - [ ] **Step 6: コミットする**
 
@@ -632,7 +632,7 @@ git commit -m "feat(web): redesign ArticleCard for clean typography and browser 
   - `AGENTS.md`: Gemini 15 RPM / 4.2s スリープのルールをローカル埋め込みスコアリングのルールに更新。
 
 - [ ] **Step 2: `tests/workflows.test.ts` の更新**
-  - `daily-pipeline.yml` から `GEMINI_API_KEY` が削除されたことを反映。
+  - `fetch-and-score-pipeline.yml` から `GEMINI_API_KEY` が削除されたことを反映。
 
 - [ ] **Step 3: 全体品質チェックの実行**
 
