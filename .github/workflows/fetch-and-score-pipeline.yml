@@ -1,8 +1,8 @@
-name: Daily Pipeline
+name: Fetch & Score Articles Pipeline
 
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 */3 * * *'
   workflow_dispatch:
 
 jobs:

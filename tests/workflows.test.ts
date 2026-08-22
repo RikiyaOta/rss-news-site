@@ -8,7 +8,7 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
   const rootDir = path.resolve(__dirname, "..");
   const workflowsDir = path.join(rootDir, ".github", "workflows");
 
-  const workflowFiles = ["ci.yml", "daily-pipeline.yml", "deploy.yml", "e2e.yml"];
+  const workflowFiles = ["ci.yml", "fetch-and-score-pipeline.yml", "deploy.yml", "e2e.yml"];
 
   describe("ワークフローファイルの存在と YAML 構文検証", () => {
     for (const file of workflowFiles) {
@@ -129,9 +129,9 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
     });
   });
 
-  describe("日次巡回パイプラインワークフロー (daily-pipeline.yml) の設定検証", () => {
-    it("定期実行 (cron: 0 21 * * *) および手動実行 (workflow_dispatch) がトリガーに設定されていること", () => {
-      const filePath = path.join(workflowsDir, "daily-pipeline.yml");
+  describe("記事収集・スコアリングパイプラインワークフロー (fetch-and-score-pipeline.yml) の設定検証", () => {
+    it("定期実行 (cron: 0 */3 * * *) および手動実行 (workflow_dispatch) がトリガーに設定されていること", () => {
+      const filePath = path.join(workflowsDir, "fetch-and-score-pipeline.yml");
       const content = fs.readFileSync(filePath, "utf-8");
       const doc = yaml.load(content) as any;
 
@@ -143,11 +143,11 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       const schedule = doc.on.schedule;
       expect(schedule).toBeDefined();
       expect(Array.isArray(schedule)).toBe(true);
-      expect(schedule[0].cron).toBe("0 21 * * *");
+      expect(schedule[0].cron).toBe("0 */3 * * *");
     });
 
     it("pnpm pipeline の実行と必要な環境変数シークレットが設定されていること", () => {
-      const filePath = path.join(workflowsDir, "daily-pipeline.yml");
+      const filePath = path.join(workflowsDir, "fetch-and-score-pipeline.yml");
       const content = fs.readFileSync(filePath, "utf-8");
 
       expect(content).toContain("pnpm pipeline");

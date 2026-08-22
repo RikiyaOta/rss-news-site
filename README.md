@@ -2,7 +2,7 @@
 
 完全無料で運用可能な、AI駆動型の個人向けニュース収集・要約・セマンティック検索ダッシュボードシステムです。
 
-GitHub Actions による毎日の自動巡回で最新の技術記事を収集し、多言語ベクトルモデル（`BAAI/bge-m3`）による興味関心スコアリングとメタデータ抽出を行い、Cloudflare D1 に同期。Cloudflare Workers（Static Assets + Hono）と Workers AI（`@cf/baai/bge-m3`）を活用して、高速な日別記事配信と自然言語セマンティック検索を提供します。
+GitHub Actions による自動巡回（実行スケジュールは `.github/workflows/fetch-and-score-pipeline.yml` を参照）で最新の技術記事を収集し、多言語ベクトルモデル（`BAAI/bge-m3`）による興味関心スコアリングとメタデータ抽出を行い、Cloudflare D1 に同期。Cloudflare Workers（Static Assets + Hono）と Workers AI（`@cf/baai/bge-m3`）を活用して、高速な日別記事配信と自然言語セマンティック検索を提供します。
 
 ---
 
@@ -19,14 +19,14 @@ GitHub Actions による毎日の自動巡回で最新の技術記事を収集�
 - **モダン & 軽量なフロントエンド:**
   - React 19 + Tailwind CSS + Lucide Icons による快適な UI/UX。日別ナビゲーションとセマンティック検索のシームレスなタブ切り替え。
 - **IaC & 自動デプロイ:**
-  - Terraform による Cloudflare D1 データベースのコード管理、および Wrangler による Cloudflare Workers (Static Assets) への自動デプロイ。GitHub Actions による CI/CD・日次バッチ・定期 E2E テスト。
+  - Terraform による Cloudflare D1 データベースのコード管理、および Wrangler による Cloudflare Workers (Static Assets) への自動デプロイ。GitHub Actions による CI/CD・定期収集バッチ・定期 E2E テスト。
 
 ---
 
 ## 🏗️ システム構成図
 
 ```
-[ GitHub Actions (日次自動実行: Cron) ]
+[ GitHub Actions (定期自動実行: Cron) ]
   │
   ├── 1. 各 RSS フィードから新規記事を取得 & メタデータ補完 (og:description)
   ├── 2. BAAI/bge-m3 で記事埋め込みベクトル生成 (1024次元 Float32Array)
@@ -64,7 +64,7 @@ Terraform の状態ファイル（`terraform.tfstate`）を管理するため、
 |---|---|:---:|
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID（Terraform / Workers / D1 用） | 必須 |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare D1 & Workers の編集権限を持つ API トークン | 必須 |
-| `CLOUDFLARE_D1_DATABASE_ID` | Cloudflare D1 データベース ID（日次パイプライン同期用） | 必須 |
+| `CLOUDFLARE_D1_DATABASE_ID` | Cloudflare D1 データベース ID（記事収集パイプライン同期用） | 必須 |
 | `R2_ACCESS_KEY_ID` | Terraform tfstate 管理用 R2 の S3 互換 Access Key ID | 必須 |
 | `R2_SECRET_ACCESS_KEY` | Terraform tfstate 管理用 R2 の S3 互換 Secret Access Key | 必須 |
 
@@ -73,7 +73,7 @@ Terraform の状態ファイル（`terraform.tfstate`）を管理するため、
 1. **インフラ & フロントエンドのデプロイ:**
    - コードを `main` ブランチに push すると、`.github/workflows/deploy.yml` が自動起動し、Terraform の適用（D1 データベース作成）と Cloudflare Workers (Static Assets) へのデプロイが完了します。
 2. **初回の記事収集パイプライン実行:**
-   - GitHub の **Actions** タブから `Daily Pipeline` ワークフローを選択し、**Run workflow**（手動実行）をクリックして初回データを収集し、D1 データベースに同期します。
+   - GitHub の **Actions** タブから `Fetch & Score Articles Pipeline` ワークフローを選択し、**Run workflow**（手動実行）をクリックして初回データを収集し、D1 データベースに同期します。
 
 ---
 

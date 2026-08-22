@@ -100,7 +100,7 @@ export interface Article {
 1. **パッケージ依存:**
    * `package.json` から `@google/genai` を削除。
 2. **GitHub Actions ワークフロー:**
-   * `.github/workflows/daily-pipeline.yml` から `GEMINI_API_KEY` の環境変数を完全削除。
+   * `.github/workflows/fetch-and-score-pipeline.yml` から `GEMINI_API_KEY` の環境変数を完全削除。
 3. **ドキュメント更新:**
    * `README.md` のシークレット一覧から `GEMINI_API_KEY` を削除し、Gemini API 制限に関する記載をローカル多言語スコアリングの説明に更新。
    * `AGENTS.md` の 15 RPM / 4.2s スリープ規定を更新。
