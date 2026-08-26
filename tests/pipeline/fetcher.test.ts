@@ -217,9 +217,16 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
 
     afterEach(() => {
       vi.restoreAllMocks();
+      vi.useRealTimers();
     });
 
     it("正常なフィードから記事一覧を取得・正規化して返却できること", async () => {
+      // fetchFeedArticles は published_at を「実行時の現在時刻」と比較して
+      // 直近 maxAgeDays 日分のみを返すため、固定日時のフィクスチャは
+      // 時間の経過とともに必ず除外されるようになってしまう。
+      // フィクスチャと整合する時刻にシステム時刻を固定して実行時刻への依存を排除する。
+      vi.setSystemTime(new Date("2026-08-19T12:00:00.000Z"));
+
       const source: FeedSource = {
         name: "Test Feed",
         url: "https://example.com/feed.xml",
