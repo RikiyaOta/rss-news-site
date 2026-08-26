@@ -231,6 +231,49 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
     }
   });
 
+  describe("シェルパイプを含むステップの終了ステータス伝播検証 (pipefail)", () => {
+    /**
+     * run スクリプト内でパイプ演算子 (`|`) が使われているかを判定する。
+     * `||` (OR 演算子) はパイプ演算子ではないため除外する。
+     */
+    function containsShellPipe(script: string): boolean {
+      return script.split("\n").some((line) => /\|\s*\S/.test(line.replace(/\|\|/g, "")));
+    }
+
+    /**
+     * ステップが pipefail を有効にした状態で実行されるかを判定する。
+     * GitHub Actions のデフォルトシェルは `bash -e` で pipefail が無効だが、
+     * `shell: bash` を明示すると `bash --noprofile --norc -eo pipefail` になる。
+     */
+    function hasPipefail(doc: any, job: any, step: any): boolean {
+      const shell = step.shell ?? job.defaults?.run?.shell ?? doc.defaults?.run?.shell;
+      if (shell === "bash") return true;
+      return /set\s+-[a-zA-Z]*o\s+pipefail|set\s+-o\s+pipefail/.test(step.run ?? "");
+    }
+
+    for (const file of workflowFiles) {
+      it(`${file} のパイプを含む run ステップが pipefail 有効で実行されること`, () => {
+        const filePath = path.join(workflowsDir, file);
+        const doc = yaml.load(fs.readFileSync(filePath, "utf-8")) as any;
+
+        for (const [jobName, job] of Object.entries<any>(doc.jobs ?? {})) {
+          for (const step of job.steps ?? []) {
+            if (typeof step.run !== "string" || !containsShellPipe(step.run)) continue;
+
+            expect(
+              hasPipefail(doc, job, step),
+              `${file} のジョブ "${jobName}" のステップ "${step.name ?? step.run.trim().split("\n")[0]}" は ` +
+                `パイプを含むが pipefail が無効です。GitHub Actions のデフォルトシェル (bash -e) では ` +
+                `パイプラインの終了ステータスが最後のコマンドのものになるため、` +
+                `前段のコマンドが失敗しても CI が成功扱いになります。` +
+                `\`shell: bash\` を明示するか \`set -o pipefail\` を追加してください。`,
+            ).toBe(true);
+          }
+        }
+      });
+    }
+  });
+
   describe("Dependabot (dependabot.yml) の設定検証", () => {
     it(".github/dependabot.yml が存在し、有効な YAML としてパースできること", () => {
       const filePath = path.join(rootDir, ".github", "dependabot.yml");
