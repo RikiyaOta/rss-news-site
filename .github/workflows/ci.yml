@@ -86,6 +86,11 @@ jobs:
           fi
 
       - name: テスト実行とカバレッジ計測
+        # GitHub Actions のデフォルトシェル (bash -e) は pipefail が無効なため、
+        # パイプの終了ステータスが最後のコマンド (tee) のものになり、
+        # pnpm test:coverage が失敗しても CI が成功扱いになってしまう。
+        # shell: bash を明示すると bash --noprofile --norc -eo pipefail が使われる。
+        shell: bash
         run: |
           pnpm test:coverage 2>&1 | tee coverage_raw.txt
           sed -e 's/\x1b\[[0-9;]*m//g' coverage_raw.txt > coverage_clean.txt
