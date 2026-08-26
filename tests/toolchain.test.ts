@@ -57,6 +57,23 @@ describe("ツールチェーンおよびワークスペース初期設定の検�
     expect(devDeps["vite"]).toBeDefined();
   });
 
+  it("better-sqlite3 が Node-API 移行済みの v13 以降に固定されていること", () => {
+    // better-sqlite3 v12 以前は生の V8 API (node::ObjectWrap) を利用しており、
+    // C++ オブジェクトの破棄時に node::RemoveEnvironmentCleanupHook() を呼び出す。
+    // この関数は v8::Context に入っていない状態で GC が走ると
+    // 「Assertion failed: (env) != nullptr」で abort (exit code 134) するため、
+    // Node-API (Napi::ObjectWrap) へ移行した v13 以降を必須とする。
+    const pkgPath = path.join(rootDir, "package.json");
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+
+    const range: string = pkg.dependencies["better-sqlite3"];
+    expect(range).toBeDefined();
+
+    const major = Number(range.replace(/^[^0-9]*/, "").split(".")[0]);
+    expect(Number.isNaN(major)).toBe(false);
+    expect(major).toBeGreaterThanOrEqual(13);
+  });
+
   it("tsconfig.json のエイリアス設定および設定値が正しいこと", () => {
     const tsconfigPath = path.join(rootDir, "tsconfig.json");
     expect(fs.existsSync(tsconfigPath)).toBe(true);
