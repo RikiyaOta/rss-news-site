@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import Database from "better-sqlite3";
 import { syncArticlesToD1, D1SyncOptions } from "../../src/pipeline/d1-sync";
 import { ArticleInput } from "../../src/server/db/articles";
 
@@ -77,6 +78,34 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     expect(payload.sql).toContain("INSERT INTO articles");
     expect(payload.sql).toContain("ON CONFLICT(url) DO UPDATE SET");
     expect(payload.params.length).toBe(3 * 8); // 3 articles * 8 scalar columns (embedding is native hex literal)
+  });
+
+  it("再同期時に公開日時が前進しないよう ON CONFLICT 句で MIN() による日付保持が指定されること", async () => {
+    let capturedPayload: any;
+
+    const mockFetch = vi.fn().mockImplementation((_url, init) => {
+      capturedPayload = JSON.parse(init.body);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      });
+    });
+
+    await syncArticlesToD1({
+      accountId: "acc-test",
+      databaseId: "db-test",
+      apiToken: "token-test",
+      articles: [sampleArticles[0]],
+      customFetch: mockFetch as unknown as typeof fetch,
+    });
+
+    expect(capturedPayload.sql).toContain(
+      "published_at = MIN(excluded.published_at, articles.published_at)",
+    );
+    expect(capturedPayload.sql).toContain(
+      "published_date_jst = MIN(excluded.published_date_jst, articles.published_date_jst)",
+    );
   });
 
   it("D1 REST API の制約に則り、送信される SQL が単一ステートメントであり、プレースホルダー (?) の個数と params.length が完全一致すること", async () => {
@@ -387,6 +416,125 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
         customFetch: mockErrorFetch as any,
       });
       expect(errorSet.size).toBe(0);
+    });
+  });
+
+  describe("repairPublishedDatesInD1 (既存記事の公開日補正)", () => {
+    const repairInputs = [
+      {
+        url: "https://example.com/articles/wrong-date",
+        published_at: "2026-08-25T01:00:00.000Z",
+        published_date_jst: "2026-08-25",
+      },
+      {
+        url: "https://example.com/articles/correct-date",
+        published_at: "2026-08-27T01:00:00.000Z",
+        published_date_jst: "2026-08-27",
+      },
+    ];
+
+    it("生成される補正 SQL が実際の SQLite 上で、より古い公開日時を持つ行のみを更新すること", async () => {
+      const { buildPublishedDateRepairStatement } = await import("../../src/pipeline/d1-sync");
+      const db = new Database(":memory:");
+
+      try {
+        db.exec(`
+          CREATE TABLE articles (
+            id TEXT PRIMARY KEY,
+            url TEXT NOT NULL UNIQUE,
+            published_at TEXT NOT NULL,
+            published_date_jst TEXT NOT NULL
+          );
+        `);
+        // 収集時刻で誤登録された記事（本来の公開日は 2026-08-25）
+        db.prepare("INSERT INTO articles VALUES (?, ?, ?, ?)").run(
+          "art-wrong",
+          "https://example.com/articles/wrong-date",
+          "2026-08-28T09:00:00.000Z",
+          "2026-08-28",
+        );
+        // 既に正しい公開日を持つ記事（更新されないこと）
+        db.prepare("INSERT INTO articles VALUES (?, ?, ?, ?)").run(
+          "art-correct",
+          "https://example.com/articles/correct-date",
+          "2026-08-26T01:00:00.000Z",
+          "2026-08-26",
+        );
+
+        const { sql, params } = buildPublishedDateRepairStatement(repairInputs);
+        const info = db.prepare(sql).run(...(params as string[]));
+
+        expect(info.changes).toBe(1);
+
+        const rows = db
+          .prepare("SELECT id, published_at, published_date_jst FROM articles ORDER BY id")
+          .all() as Array<{ id: string; published_at: string; published_date_jst: string }>;
+
+        expect(rows[0]).toEqual({
+          id: "art-correct",
+          published_at: "2026-08-26T01:00:00.000Z",
+          published_date_jst: "2026-08-26",
+        });
+        expect(rows[1]).toEqual({
+          id: "art-wrong",
+          published_at: "2026-08-25T01:00:00.000Z",
+          published_date_jst: "2026-08-25",
+        });
+      } finally {
+        db.close();
+      }
+    });
+
+    it("D1 REST API へ補正 SQL をバッチ送信し、更新件数を返却すること", async () => {
+      const { repairPublishedDatesInD1 } = await import("../../src/pipeline/d1-sync");
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ result: [{ meta: { changes: 1 } }], success: true }),
+      });
+
+      const result = await repairPublishedDatesInD1({
+        accountId: "acc-123",
+        databaseId: "db-456",
+        apiToken: "token-789",
+        articles: repairInputs,
+        customFetch: mockFetch as any,
+      });
+
+      expect(result.total).toBe(2);
+      expect(result.repaired).toBe(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.sql).toContain("UPDATE articles");
+      expect(body.params).toHaveLength(repairInputs.length * 3);
+    });
+
+    it("補正対象が空、または API エラー時に例外を投げず安全に完了すること", async () => {
+      const { repairPublishedDatesInD1 } = await import("../../src/pipeline/d1-sync");
+
+      const emptyResult = await repairPublishedDatesInD1({
+        accountId: "acc-123",
+        databaseId: "db-456",
+        apiToken: "token-789",
+        articles: [],
+      });
+      expect(emptyResult).toEqual({ total: 0, repaired: 0 });
+
+      const mockErrorFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => "internal error",
+      });
+      const errorResult = await repairPublishedDatesInD1({
+        accountId: "acc-123",
+        databaseId: "db-456",
+        apiToken: "token-789",
+        articles: repairInputs,
+        customFetch: mockErrorFetch as any,
+      });
+      expect(errorResult.repaired).toBe(0);
+      expect(errorResult.errors?.length).toBeGreaterThan(0);
     });
   });
 });

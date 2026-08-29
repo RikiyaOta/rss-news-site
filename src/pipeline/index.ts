@@ -2,10 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config";
-import { fetchFeedArticles, RawArticle } from "./fetcher";
+import { fetchFeedArticles, DatedArticle } from "./fetcher";
 import { scoreArticleWithProfile, precomputeInterestVectors } from "./scorer";
 import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
-import { syncArticlesToD1, ensureD1Schema, fetchExistingUrlsFromD1, D1SyncResult } from "./d1-sync";
+import {
+  syncArticlesToD1,
+  ensureD1Schema,
+  fetchExistingUrlsFromD1,
+  repairPublishedDatesInD1,
+  D1SyncResult,
+} from "./d1-sync";
 import { initLocalDatabase, upsertArticlesLocal } from "./db";
 
 export interface PipelineOptions {
@@ -56,7 +62,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   console.log(`[1/3] 📡 RSS フィード巡回中... (直近 ${maxAgeDays} 日間)`);
   console.log(`========================================`);
   const config = loadConfig(configPath);
-  const allArticles: RawArticle[] = [];
+  const allArticles: DatedArticle[] = [];
 
   for (let i = 0; i < config.feeds.length; i++) {
     const feed = config.feeds[i];
@@ -70,7 +76,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   const totalFetched = allArticles.length;
   const seenIds = new Set<string>();
   const seenUrls = new Set<string>();
-  const candidateArticles: RawArticle[] = [];
+  const candidateArticles: DatedArticle[] = [];
   let deduplicatedCount = 0;
 
   for (const raw of allArticles) {
@@ -92,10 +98,12 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   let existingD1Urls = new Set<string>();
   if (!skipD1Sync && accountId && databaseId && apiToken) {
     try {
-      // 直近 maxAgeDays 日以降の登録済み URL を確認
-      const sinceDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
+      // 直近 maxAgeDays 日以降の登録済み URL を確認する。
+      // published_date_jst は JST 基準のため照合日も JST で算出し、
+      // 日付境界の記事を取りこぼさないよう 1 日分の余裕を持たせる。
+      const sinceDate = computePublishedDateJst(
+        new Date(Date.now() - (maxAgeDays + 1) * 24 * 60 * 60 * 1000).toISOString(),
+      );
       existingD1Urls = await fetchExistingUrlsFromD1({
         accountId,
         databaseId,
@@ -111,17 +119,18 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     }
   }
 
-  const targetArticles: RawArticle[] = [];
-  let alreadyScoredCount = 0;
+  const targetArticles: DatedArticle[] = [];
+  const alreadyRegisteredArticles: DatedArticle[] = [];
 
   for (const raw of candidateArticles) {
     if (existingD1Urls.has(raw.url)) {
-      alreadyScoredCount++;
+      alreadyRegisteredArticles.push(raw);
     } else {
       targetArticles.push(raw);
     }
   }
 
+  const alreadyScoredCount = alreadyRegisteredArticles.length;
   const totalSkipped = deduplicatedCount + alreadyScoredCount;
 
   console.log(`\n📊 記事収集結果サマリー:`);
@@ -130,6 +139,31 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     `  ・スキップ件数: ${totalSkipped} 件 (重複: ${deduplicatedCount}件, 既存登録済み: ${alreadyScoredCount}件)`,
   );
   console.log(`  ・新規スコアリング対象: ${targetArticles.length} 件\n`);
+
+  // 収集時刻ベースなどで誤った公開日が登録済みの記事を、フィードの公開日時へ補正する
+  if (!skipD1Sync && accountId && databaseId && apiToken && alreadyRegisteredArticles.length > 0) {
+    try {
+      const repairResult = await repairPublishedDatesInD1({
+        accountId,
+        databaseId,
+        apiToken,
+        articles: alreadyRegisteredArticles.map((raw) => ({
+          url: raw.url,
+          published_at: raw.published_at,
+          published_date_jst: computePublishedDateJst(raw.published_at),
+        })),
+        customFetch,
+      });
+      if (repairResult.repaired > 0) {
+        console.log(`  🩹 既存記事の公開日を ${repairResult.repaired} 件補正しました。`);
+      }
+      if (repairResult.errors && repairResult.errors.length > 0) {
+        console.warn("  (公開日補正の警告):", JSON.stringify(repairResult.errors));
+      }
+    } catch (repairErr: any) {
+      console.warn("  (公開日補正スキップ):", repairErr?.message);
+    }
+  }
 
   const processedArticles: ArticleInput[] = [];
 

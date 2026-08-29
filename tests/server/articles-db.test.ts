@@ -281,6 +281,68 @@ describe("D1 データベーススキーマ & クエリレイヤー (src/server/
       expect(results[0].summary).toBe("更新後要約");
     });
 
+    it("再 upsert 時に公開日時が後の日付へ前進せず、最初に取得した公開日時が維持されること", async () => {
+      const initialArticle: ArticleInput = {
+        id: "art-keep-date",
+        title: "公開日固定テスト記事",
+        url: "https://example.com/keep-published-at",
+        source_name: "Source",
+        summary: "初回要約",
+        score: 70,
+        published_at: "2026-08-25T01:00:00.000Z", // JST 2026-08-25
+      };
+
+      await upsertArticles(mockD1, [initialArticle]);
+
+      // 再巡回時にフィード側の日付が更新日時などで後ろへずれたケース
+      const rePublishedArticle: ArticleInput = {
+        ...initialArticle,
+        title: "再巡回後タイトル",
+        published_at: "2026-08-28T01:00:00.000Z", // JST 2026-08-28
+      };
+
+      await upsertArticles(mockD1, [rePublishedArticle]);
+
+      const results25 = await getArticlesByPublishedDate(mockD1, "2026-08-25");
+      expect(results25).toHaveLength(1);
+      expect(results25[0].title).toBe("再巡回後タイトル");
+      expect(results25[0].published_at).toBe("2026-08-25T01:00:00.000Z");
+      expect(results25[0].published_date_jst).toBe("2026-08-25");
+
+      // 後の日付側には重複表示されないこと
+      const results28 = await getArticlesByPublishedDate(mockD1, "2026-08-28");
+      expect(results28).toHaveLength(0);
+    });
+
+    it("再 upsert 時により古い公開日時が判明した場合は正しい公開日時へ補正されること", async () => {
+      const wrongDateArticle: ArticleInput = {
+        id: "art-fix-date",
+        title: "公開日補正テスト記事",
+        url: "https://example.com/fix-published-at",
+        source_name: "Source",
+        summary: "要約",
+        score: 55,
+        published_at: "2026-08-28T05:00:00.000Z", // JST 2026-08-28（誤った収集日ベースの日付）
+      };
+
+      await upsertArticles(mockD1, [wrongDateArticle]);
+
+      const correctedArticle: ArticleInput = {
+        ...wrongDateArticle,
+        published_at: "2026-08-26T05:00:00.000Z", // JST 2026-08-26（フィードの正しい公開日時）
+      };
+
+      await upsertArticles(mockD1, [correctedArticle]);
+
+      const results26 = await getArticlesByPublishedDate(mockD1, "2026-08-26");
+      expect(results26).toHaveLength(1);
+      expect(results26[0].published_at).toBe("2026-08-26T05:00:00.000Z");
+      expect(results26[0].published_date_jst).toBe("2026-08-26");
+
+      const results28 = await getArticlesByPublishedDate(mockD1, "2026-08-28");
+      expect(results28).toHaveLength(0);
+    });
+
     it("getArticlesByPublishedDate で limit と offset によるページネーションが動作すること", async () => {
       const articles: ArticleInput[] = Array.from({ length: 5 }, (_, i) => ({
         id: `page-art-${i}`,
