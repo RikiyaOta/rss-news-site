@@ -179,8 +179,8 @@ ON CONFLICT(url) DO UPDATE SET
   source_name = excluded.source_name,
   summary = excluded.summary,
   score = excluded.score,
-  published_at = excluded.published_at,
-  published_date_jst = excluded.published_date_jst,
+  published_at = MIN(excluded.published_at, articles.published_at),
+  published_date_jst = MIN(excluded.published_date_jst, articles.published_date_jst),
   embedding = COALESCE(excluded.embedding, articles.embedding);
 `.trim();
 

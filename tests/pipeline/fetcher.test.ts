@@ -3,6 +3,7 @@ import Parser from "rss-parser";
 import {
   generateArticleId,
   normalizeFeedItem,
+  extractPublishedAt,
   fetchFeedArticles,
   isWithinDays,
   extractMetaDescription,
@@ -108,7 +109,7 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
       expect(article.url).toBe("");
       expect(article.snippet).toBe("");
       expect(article.source_name).toBe("Fallback Source");
-      expect(typeof article.published_at).toBe("string");
+      expect(article.published_at).toBeNull();
       expect(typeof article.id).toBe("string");
     });
 
@@ -178,7 +179,7 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
       expect(article.published_at).toBe("2026-08-19T09:30:00.000Z");
     });
 
-    it("日付が無効または存在しない場合に現在時刻（ISO 8601形式）にフォールバックすること", () => {
+    it("日付が無効または存在しない場合に収集時刻へフォールバックせず published_at を null とすること", () => {
       const rawItemInvalidDate = {
         title: "不正な日付",
         link: "https://example.com/invalid-date",
@@ -189,25 +190,76 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
         link: "https://example.com/no-date",
       };
 
-      const beforeTime = new Date().getTime();
       const article1 = normalizeFeedItem(rawItemInvalidDate, "Source");
       const article2 = normalizeFeedItem(rawItemNoDate, "Source");
-      const afterTime = new Date().getTime();
 
-      const time1 = new Date(article1.published_at).getTime();
-      const time2 = new Date(article2.published_at).getTime();
+      expect(article1.published_at).toBeNull();
+      expect(article2.published_at).toBeNull();
+    });
 
-      expect(isNaN(time1)).toBe(false);
-      expect(isNaN(time2)).toBe(false);
-      expect(time1).toBeGreaterThanOrEqual(beforeTime);
-      expect(time1).toBeLessThanOrEqual(afterTime);
-      expect(time2).toBeGreaterThanOrEqual(beforeTime);
-      expect(time2).toBeLessThanOrEqual(afterTime);
+    it("Atom フィードの published を updated より優先して公開日時とすること", () => {
+      const rawItem = {
+        title: "更新された記事",
+        link: "https://example.com/atom-updated",
+        published: "2026-08-19T00:00:00.000Z",
+        updated: "2026-08-28T00:00:00.000Z",
+        isoDate: "2026-08-28T00:00:00.000Z",
+      };
+
+      const article = normalizeFeedItem(rawItem, "Atom Source");
+
+      expect(article.published_at).toBe("2026-08-19T00:00:00.000Z");
+    });
+
+    it("dc:date のみを持つフィードアイテムからも公開日時を抽出できること", () => {
+      const rawItem = {
+        title: "dc:date のみの記事",
+        link: "https://example.com/dc-date",
+        "dc:date": "2026-08-19T05:00:00.000Z",
+      };
+
+      const article = normalizeFeedItem(rawItem, "RDF Source");
+
+      expect(article.published_at).toBe("2026-08-19T05:00:00.000Z");
+    });
+  });
+
+  describe("extractPublishedAt", () => {
+    it("公開日時候補フィールドが1つも無い場合に null を返すこと", () => {
+      expect(extractPublishedAt({})).toBeNull();
+      expect(extractPublishedAt({ title: "日付なし" })).toBeNull();
+    });
+
+    it("パースできない日付文字列しか無い場合に null を返すこと", () => {
+      expect(extractPublishedAt({ pubDate: "not a date" })).toBeNull();
+      expect(extractPublishedAt({ pubDate: "   " })).toBeNull();
+    });
+
+    it("パース可能な候補が複数ある場合に優先順位の高いフィールドを採用すること", () => {
+      const item = {
+        published: "2026-08-19T00:00:00.000Z",
+        isoDate: "2026-08-20T00:00:00.000Z",
+        pubDate: "Fri, 21 Aug 2026 00:00:00 GMT",
+      };
+
+      expect(extractPublishedAt(item)).toBe("2026-08-19T00:00:00.000Z");
+    });
+
+    it("先頭候補がパース不能な場合に次の候補へフォールバックすること", () => {
+      const item = {
+        published: "invalid",
+        isoDate: "2026-08-20T00:00:00.000Z",
+      };
+
+      expect(extractPublishedAt(item)).toBe("2026-08-20T00:00:00.000Z");
     });
   });
 
   describe("fetchFeedArticles", () => {
     let mockParser: any;
+
+    /** 直近日数フィルタを通過する「1時間前」の公開日時を生成する */
+    const recentIsoDate = () => new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
     beforeEach(() => {
       mockParser = {
@@ -292,6 +344,45 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
       expect(articles[0].title).toBe("直近の記事");
     });
 
+    it("公開日時を持たないフィードアイテムを収集時刻で代替せずに除外すること", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const source: FeedSource = {
+        name: "Test Feed",
+        url: "https://example.com/feed.xml",
+      };
+
+      const recentDate = new Date(Date.now() - 60 * 60 * 1000).toISOString(); // 1時間前
+
+      mockParser.parseURL.mockResolvedValue({
+        items: [
+          {
+            title: "公開日時ありの記事",
+            link: "https://example.com/with-date",
+            contentSnippet: "概要",
+            isoDate: recentDate,
+          },
+          {
+            title: "公開日時なしの記事",
+            link: "https://example.com/without-date",
+            contentSnippet: "概要",
+          },
+          {
+            title: "公開日時が不正な記事",
+            link: "https://example.com/broken-date",
+            contentSnippet: "概要",
+            pubDate: "不正な日付",
+          },
+        ],
+      });
+
+      const articles = await fetchFeedArticles(source, mockParser, undefined, 3);
+
+      expect(articles).toHaveLength(1);
+      expect(articles[0].title).toBe("公開日時ありの記事");
+      expect(articles[0].published_at).toBe(recentDate);
+    });
+
     it("URLが空または未指定の無効なフィードアイテムを除外して有効な記事のみを返却すること", async () => {
       const source: FeedSource = {
         name: "Test Feed",
@@ -304,6 +395,7 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
             title: "有効な記事",
             link: "https://example.com/valid",
             contentSnippet: "概要1",
+            isoDate: recentIsoDate(),
           },
           {
             title: "URLなしの記事",
@@ -361,6 +453,7 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
             title: "デフォルトパーサーテスト",
             link: "https://example.com/default-test",
             contentSnippet: "テスト概要",
+            isoDate: recentIsoDate(),
           },
         ],
       } as any);
@@ -390,6 +483,7 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
             title: "Show HN: Modern AI News Site",
             link: "https://example.com/show-hn",
             contentSnippet: "",
+            isoDate: recentIsoDate(),
           },
         ],
       });
@@ -419,6 +513,7 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
             title: "Blog Post with snippet",
             link: "https://techblog.example.com/post-1",
             contentSnippet: "Existing snippet content",
+            isoDate: recentIsoDate(),
           },
         ],
       });
@@ -533,9 +628,24 @@ describe("RSSフィード取得・正規化モジュール (src/pipeline/fetcher
       expect(isWithinDays(date1YearAgo, 3, now)).toBe(false);
     });
 
-    it("日付文字列が空または無効な場合は安全に true を返すこと（最新扱い）", () => {
-      expect(isWithinDays("", 3)).toBe(true);
-      expect(isWithinDays("invalid-date-string", 3)).toBe(true);
+    it("公開日時が null・空文字・無効な場合は false を返して取り込み対象から除外すること", () => {
+      expect(isWithinDays(null, 3)).toBe(false);
+      expect(isWithinDays("", 3)).toBe(false);
+      expect(isWithinDays("invalid-date-string", 3)).toBe(false);
+    });
+
+    it("フィード側のタイムゾーン誤りによる 24 時間を超える未来日付を false として除外すること", () => {
+      const now = new Date("2026-08-20T12:00:00.000Z");
+      const farFuture = "2026-08-22T12:00:00.000Z";
+
+      expect(isWithinDays(farFuture, 3, now)).toBe(false);
+    });
+
+    it("24 時間以内の軽微な未来日付（予約公開・時刻ずれ）は true として許容すること", () => {
+      const now = new Date("2026-08-20T12:00:00.000Z");
+      const nearFuture = "2026-08-20T20:00:00.000Z";
+
+      expect(isWithinDays(nearFuture, 3, now)).toBe(true);
     });
   });
 });

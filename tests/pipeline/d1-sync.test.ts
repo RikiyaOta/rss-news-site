@@ -79,6 +79,34 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
     expect(payload.params.length).toBe(3 * 8); // 3 articles * 8 scalar columns (embedding is native hex literal)
   });
 
+  it("再同期時に公開日時が前進しないよう ON CONFLICT 句で MIN() による日付保持が指定されること", async () => {
+    let capturedPayload: any;
+
+    const mockFetch = vi.fn().mockImplementation((_url, init) => {
+      capturedPayload = JSON.parse(init.body);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ success: true }),
+      });
+    });
+
+    await syncArticlesToD1({
+      accountId: "acc-test",
+      databaseId: "db-test",
+      apiToken: "token-test",
+      articles: [sampleArticles[0]],
+      customFetch: mockFetch as unknown as typeof fetch,
+    });
+
+    expect(capturedPayload.sql).toContain(
+      "published_at = MIN(excluded.published_at, articles.published_at)",
+    );
+    expect(capturedPayload.sql).toContain(
+      "published_date_jst = MIN(excluded.published_date_jst, articles.published_date_jst)",
+    );
+  });
+
   it("D1 REST API の制約に則り、送信される SQL が単一ステートメントであり、プレースホルダー (?) の個数と params.length が完全一致すること", async () => {
     let capturedPayload: any;
 

@@ -66,8 +66,9 @@ export function upsertArticlesLocal(db: DatabaseType, articles: ArticleInput[]):
       source_name = excluded.source_name,
       summary = excluded.summary,
       score = excluded.score,
-      published_at = excluded.published_at,
-      published_date_jst = excluded.published_date_jst,
+      -- 公開日時は再巡回で後ろへ動かさない（より古い＝実際の公開日時を正とする）
+      published_at = MIN(excluded.published_at, articles.published_at),
+      published_date_jst = MIN(excluded.published_date_jst, articles.published_date_jst),
       embedding = COALESCE(excluded.embedding, articles.embedding);
   `);
 

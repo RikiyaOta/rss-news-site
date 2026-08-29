@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config";
-import { fetchFeedArticles, RawArticle } from "./fetcher";
+import { fetchFeedArticles, DatedArticle } from "./fetcher";
 import { scoreArticleWithProfile, precomputeInterestVectors } from "./scorer";
 import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
 import { syncArticlesToD1, ensureD1Schema, fetchExistingUrlsFromD1, D1SyncResult } from "./d1-sync";
@@ -56,7 +56,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   console.log(`[1/3] 📡 RSS フィード巡回中... (直近 ${maxAgeDays} 日間)`);
   console.log(`========================================`);
   const config = loadConfig(configPath);
-  const allArticles: RawArticle[] = [];
+  const allArticles: DatedArticle[] = [];
 
   for (let i = 0; i < config.feeds.length; i++) {
     const feed = config.feeds[i];
@@ -70,7 +70,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   const totalFetched = allArticles.length;
   const seenIds = new Set<string>();
   const seenUrls = new Set<string>();
-  const candidateArticles: RawArticle[] = [];
+  const candidateArticles: DatedArticle[] = [];
   let deduplicatedCount = 0;
 
   for (const raw of allArticles) {
@@ -92,10 +92,12 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   let existingD1Urls = new Set<string>();
   if (!skipD1Sync && accountId && databaseId && apiToken) {
     try {
-      // 直近 maxAgeDays 日以降の登録済み URL を確認
-      const sinceDate = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .slice(0, 10);
+      // 直近 maxAgeDays 日以降の登録済み URL を確認する。
+      // published_date_jst は JST 基準のため照合日も JST で算出し、
+      // 日付境界の記事を取りこぼさないよう 1 日分の余裕を持たせる。
+      const sinceDate = computePublishedDateJst(
+        new Date(Date.now() - (maxAgeDays + 1) * 24 * 60 * 60 * 1000).toISOString(),
+      );
       existingD1Urls = await fetchExistingUrlsFromD1({
         accountId,
         databaseId,
@@ -111,7 +113,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     }
   }
 
-  const targetArticles: RawArticle[] = [];
+  const targetArticles: DatedArticle[] = [];
   let alreadyScoredCount = 0;
 
   for (const raw of candidateArticles) {

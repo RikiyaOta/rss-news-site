@@ -4,15 +4,18 @@ import path from "node:path";
 import os from "node:os";
 import {
   initDailyDatabase,
+  initLocalDatabase,
   initSearchIndexDatabase,
   getExistingArticleIds,
   getExistingSearchIndexIds,
   insertArticles,
   insertVectors,
+  upsertArticlesLocal,
   getArticlesByScore,
   getAllSearchVectors,
 } from "../../src/pipeline/db";
 import { Article } from "../../src/shared/types";
+import { ArticleInput } from "../../src/server/db/articles";
 
 describe("SQLite データベース操作モジュール (src/pipeline/db) のテスト", () => {
   let tempDir: string;
@@ -256,6 +259,50 @@ describe("SQLite データベース操作モジュール (src/pipeline/db) の�
       try {
         expect(() => insertArticles(db, [])).not.toThrow();
         expect(getArticlesByScore(db)).toEqual([]);
+      } finally {
+        db.close();
+      }
+    });
+  });
+
+  describe("ローカル D1 互換データベース (upsertArticlesLocal)", () => {
+    it("同一 URL の記事を再 upsert しても公開日時が後の日付へ前進しないこと", () => {
+      const dbPath = path.join(tempDir, "local_articles.db");
+      const db = initLocalDatabase(dbPath);
+
+      const initialArticle: ArticleInput = {
+        id: "local-keep-date",
+        title: "初回タイトル",
+        url: "https://example.com/local-keep-date",
+        source_name: "Source",
+        summary: "初回要約",
+        score: 65,
+        published_at: "2026-08-25T01:00:00.000Z",
+        published_date_jst: "2026-08-25",
+      };
+
+      try {
+        upsertArticlesLocal(db, [initialArticle]);
+        upsertArticlesLocal(db, [
+          {
+            ...initialArticle,
+            title: "再巡回後タイトル",
+            published_at: "2026-08-28T01:00:00.000Z",
+            published_date_jst: "2026-08-28",
+          },
+        ]);
+
+        const row = db
+          .prepare("SELECT title, published_at, published_date_jst FROM articles WHERE url = ?")
+          .get("https://example.com/local-keep-date") as {
+          title: string;
+          published_at: string;
+          published_date_jst: string;
+        };
+
+        expect(row.title).toBe("再巡回後タイトル");
+        expect(row.published_at).toBe("2026-08-25T01:00:00.000Z");
+        expect(row.published_date_jst).toBe("2026-08-25");
       } finally {
         db.close();
       }

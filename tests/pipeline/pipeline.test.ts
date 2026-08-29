@@ -26,7 +26,7 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
     },
   };
 
-  const sampleRawArticles: fetcherModule.RawArticle[] = [
+  const sampleRawArticles: fetcherModule.DatedArticle[] = [
     {
       id: "art-111111111111",
       title: "TypeScript 5.8 の最新機能解説",
@@ -74,6 +74,7 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   describe("パイプライン全体の統合実行フロー (RSS取得 → スコアリング・ベクトル化 → D1同期 & ローカルDB保存)", () => {
@@ -244,6 +245,54 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       expect(result.skippedCount).toBe(2);
       expect(result.processedCount).toBe(1);
       expect(scoreSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it("D1 に登録済みの URL を持つ記事が再スコアリング・再同期されずスキップされること", async () => {
+      const outputDir = path.join(tempDir, "data");
+
+      vi.spyOn(fetcherModule, "fetchFeedArticles").mockImplementation(async (source) =>
+        source.name === "Tech Feed 1" ? [sampleRawArticles[0]] : [],
+      );
+      vi.spyOn(d1SyncModule, "fetchExistingUrlsFromD1").mockResolvedValue(
+        new Set([sampleRawArticles[0].url]),
+      );
+      const scoreSpy = vi.spyOn(scorerModule, "scoreArticleWithProfile");
+      const d1SyncSpy = vi.spyOn(d1SyncModule, "syncArticlesToD1");
+
+      const result = await runPipeline({
+        dateStr: "2026-08-19",
+        configPath: configFilePath,
+        outputDir,
+        skipD1Sync: false,
+      });
+
+      expect(scoreSpy).not.toHaveBeenCalled();
+      expect(d1SyncSpy).not.toHaveBeenCalled();
+      expect(result.skippedCount).toBe(1);
+      expect(result.processedCount).toBe(0);
+    });
+
+    it("D1 の既存 URL 照合期間が JST 基準の日付かつ maxAgeDays に1日の余裕を持たせた範囲であること", async () => {
+      const outputDir = path.join(tempDir, "data");
+
+      // JST では 2026-08-28、UTC では 2026-08-27 となる時刻に固定する
+      vi.setSystemTime(new Date("2026-08-27T16:00:00.000Z"));
+
+      vi.spyOn(fetcherModule, "fetchFeedArticles").mockResolvedValue([]);
+      const existingUrlsSpy = vi
+        .spyOn(d1SyncModule, "fetchExistingUrlsFromD1")
+        .mockResolvedValue(new Set<string>());
+
+      await runPipeline({
+        configPath: configFilePath,
+        outputDir,
+        skipD1Sync: false,
+        maxAgeDays: 3,
+      });
+
+      expect(existingUrlsSpy).toHaveBeenCalledTimes(1);
+      // JST 2026-08-28 の 4 日前 (maxAgeDays 3 + 余裕 1 日) = 2026-08-24
+      expect(existingUrlsSpy.mock.calls[0][0].sinceDateJst).toBe("2026-08-24");
     });
 
     it("巡回結果が0件の場合、スコアリング処理やDB更新を行わずに正常完了すること", async () => {

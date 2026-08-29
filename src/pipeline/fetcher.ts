@@ -8,8 +8,26 @@ export interface RawArticle {
   url: string;
   source_name: string;
   snippet: string;
+  /**
+   * フィードが提供する公開日時 (UTC ISO8601)。
+   * 取得できない場合は収集時刻で代替せず null とする（画面の日付は公開日を正とするため）。
+   */
+  published_at: string | null;
+}
+
+/** 公開日時が確定した記事（スコアリング・保存の対象） */
+export interface DatedArticle extends RawArticle {
   published_at: string;
 }
+
+/**
+ * 公開日時として参照するフィールドの優先順位。
+ * Atom の published を updated より優先し、記事の更新で日付が後ろへ動かないようにする。
+ */
+const PUBLISHED_AT_FIELDS = ["published", "isoDate", "pubDate", "date", "dc:date"] as const;
+
+/** フィード側のタイムゾーン誤りを吸収しつつ、明らかに壊れた未来日付を除外する許容幅 */
+export const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000;
 
 const defaultParser = new Parser({
   headers: {
@@ -31,6 +49,22 @@ function cleanText(text: string): string {
     .trim();
 }
 
+/**
+ * フィードアイテムから公開日時 (UTC ISO8601) を抽出する。
+ * パース可能な公開日時が1つも無い場合は null を返す。
+ */
+export function extractPublishedAt(item: any): string | null {
+  for (const field of PUBLISHED_AT_FIELDS) {
+    const value = item?.[field];
+    if (typeof value !== "string" || !value.trim()) continue;
+    const parsed = new Date(value);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  }
+  return null;
+}
+
 export function normalizeFeedItem(item: any, sourceName: string): RawArticle {
   const rawUrl =
     (typeof item?.link === "string" && item.link) ||
@@ -50,38 +84,34 @@ export function normalizeFeedItem(item: any, sourceName: string): RawArticle {
     "";
   const snippet = cleanText(rawSnippet);
 
-  let published_at = new Date().toISOString();
-  const dateCandidate = item?.isoDate || item?.pubDate || item?.date;
-  if (dateCandidate) {
-    const parsed = new Date(dateCandidate);
-    if (!isNaN(parsed.getTime())) {
-      published_at = parsed.toISOString();
-    }
-  }
-
   return {
     id,
     title,
     url,
     source_name: sourceName,
     snippet,
-    published_at,
+    published_at: extractPublishedAt(item),
   };
 }
 
 /**
- * 指定された日時が基準日時から maxDays 日以内であるかを判定する（過去アーカイブ除外）
+ * 記事を取り込み対象とするかを公開日時から判定する。
+ * 公開日時が不明な記事、直近 maxDays 日より古い過去アーカイブ、
+ * および許容幅を超える未来日付（フィード側の日付不備）はいずれも除外する。
  */
 export function isWithinDays(
-  isoDateStr: string,
+  isoDateStr: string | null,
   maxDays = 3,
   referenceDate: Date = new Date(),
 ): boolean {
-  if (!isoDateStr) return true;
+  if (!isoDateStr) return false;
   const date = new Date(isoDateStr);
-  if (isNaN(date.getTime())) return true;
-  const cutoff = new Date(referenceDate.getTime() - maxDays * 24 * 60 * 60 * 1000);
-  return date.getTime() >= cutoff.getTime();
+  if (isNaN(date.getTime())) return false;
+
+  const cutoff = referenceDate.getTime() - maxDays * 24 * 60 * 60 * 1000;
+  if (date.getTime() < cutoff) return false;
+
+  return date.getTime() <= referenceDate.getTime() + FUTURE_TOLERANCE_MS;
 }
 
 /**
@@ -147,14 +177,24 @@ export async function fetchFeedArticles(
   parser: Parser = defaultParser,
   customFetch?: typeof fetch,
   maxAgeDays = 3,
-): Promise<RawArticle[]> {
+): Promise<DatedArticle[]> {
   try {
     const feed = await parser.parseURL(source.url);
     const rawItems = feed?.items ?? [];
-    const articles = rawItems
+    const normalized = rawItems
       .map((item) => normalizeFeedItem(item, source.name))
-      .filter((article) => Boolean(article.url && article.url.trim()))
-      .filter((article) => isWithinDays(article.published_at, maxAgeDays));
+      .filter((article) => Boolean(article.url && article.url.trim()));
+
+    const missingDateCount = normalized.filter((article) => !article.published_at).length;
+    if (missingDateCount > 0) {
+      console.warn(
+        `  ⚠️ [${source.name}] 公開日時が取得できない記事を ${missingDateCount} 件除外しました。`,
+      );
+    }
+
+    const articles = normalized.filter((article): article is DatedArticle =>
+      isWithinDays(article.published_at, maxAgeDays),
+    );
 
     // snippet が空の記事について og:description の補完を試行
     for (const article of articles) {
