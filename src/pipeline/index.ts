@@ -5,13 +5,7 @@ import { loadConfig } from "./config";
 import { fetchFeedArticles, DatedArticle } from "./fetcher";
 import { scoreArticleWithProfile, precomputeInterestVectors } from "./scorer";
 import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
-import {
-  syncArticlesToD1,
-  ensureD1Schema,
-  fetchExistingUrlsFromD1,
-  repairPublishedDatesInD1,
-  D1SyncResult,
-} from "./d1-sync";
+import { syncArticlesToD1, ensureD1Schema, fetchExistingUrlsFromD1, D1SyncResult } from "./d1-sync";
 import { initLocalDatabase, upsertArticlesLocal } from "./db";
 
 export interface PipelineOptions {
@@ -120,17 +114,16 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
   }
 
   const targetArticles: DatedArticle[] = [];
-  const alreadyRegisteredArticles: DatedArticle[] = [];
+  let alreadyScoredCount = 0;
 
   for (const raw of candidateArticles) {
     if (existingD1Urls.has(raw.url)) {
-      alreadyRegisteredArticles.push(raw);
+      alreadyScoredCount++;
     } else {
       targetArticles.push(raw);
     }
   }
 
-  const alreadyScoredCount = alreadyRegisteredArticles.length;
   const totalSkipped = deduplicatedCount + alreadyScoredCount;
 
   console.log(`\n📊 記事収集結果サマリー:`);
@@ -139,31 +132,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     `  ・スキップ件数: ${totalSkipped} 件 (重複: ${deduplicatedCount}件, 既存登録済み: ${alreadyScoredCount}件)`,
   );
   console.log(`  ・新規スコアリング対象: ${targetArticles.length} 件\n`);
-
-  // 収集時刻ベースなどで誤った公開日が登録済みの記事を、フィードの公開日時へ補正する
-  if (!skipD1Sync && accountId && databaseId && apiToken && alreadyRegisteredArticles.length > 0) {
-    try {
-      const repairResult = await repairPublishedDatesInD1({
-        accountId,
-        databaseId,
-        apiToken,
-        articles: alreadyRegisteredArticles.map((raw) => ({
-          url: raw.url,
-          published_at: raw.published_at,
-          published_date_jst: computePublishedDateJst(raw.published_at),
-        })),
-        customFetch,
-      });
-      if (repairResult.repaired > 0) {
-        console.log(`  🩹 既存記事の公開日を ${repairResult.repaired} 件補正しました。`);
-      }
-      if (repairResult.errors && repairResult.errors.length > 0) {
-        console.warn("  (公開日補正の警告):", JSON.stringify(repairResult.errors));
-      }
-    } catch (repairErr: any) {
-      console.warn("  (公開日補正スキップ):", repairErr?.message);
-    }
-  }
 
   const processedArticles: ArticleInput[] = [];
 

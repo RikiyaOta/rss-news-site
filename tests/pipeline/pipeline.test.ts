@@ -247,7 +247,7 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       expect(scoreSpy).toHaveBeenCalledTimes(1);
     });
 
-    it("既存登録済み記事についてフィードの公開日時で D1 の公開日補正を実行すること", async () => {
+    it("D1 に登録済みの URL を持つ記事が再スコアリング・再同期されずスキップされること", async () => {
       const outputDir = path.join(tempDir, "data");
 
       vi.spyOn(fetcherModule, "fetchFeedArticles").mockImplementation(async (source) =>
@@ -256,10 +256,8 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       vi.spyOn(d1SyncModule, "fetchExistingUrlsFromD1").mockResolvedValue(
         new Set([sampleRawArticles[0].url]),
       );
-      const repairSpy = vi
-        .spyOn(d1SyncModule, "repairPublishedDatesInD1")
-        .mockResolvedValue({ total: 1, repaired: 1 });
       const scoreSpy = vi.spyOn(scorerModule, "scoreArticleWithProfile");
+      const d1SyncSpy = vi.spyOn(d1SyncModule, "syncArticlesToD1");
 
       const result = await runPipeline({
         dateStr: "2026-08-19",
@@ -268,17 +266,10 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
         skipD1Sync: false,
       });
 
-      // 既存記事は再スコアリングされないが、公開日の補正だけは実行される
       expect(scoreSpy).not.toHaveBeenCalled();
+      expect(d1SyncSpy).not.toHaveBeenCalled();
       expect(result.skippedCount).toBe(1);
-      expect(repairSpy).toHaveBeenCalledTimes(1);
-      expect(repairSpy.mock.calls[0][0].articles).toEqual([
-        {
-          url: sampleRawArticles[0].url,
-          published_at: sampleRawArticles[0].published_at,
-          published_date_jst: "2026-08-19",
-        },
-      ]);
+      expect(result.processedCount).toBe(0);
     });
 
     it("D1 の既存 URL 照合期間が JST 基準の日付かつ maxAgeDays に1日の余裕を持たせた範囲であること", async () => {
