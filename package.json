@@ -23,7 +23,7 @@
     "pinact:check": "pinact run --check --verify .github/workflows/*.yml"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "3.8.1",
     "better-sqlite3": "^13.0.3",
     "clsx": "^2.1.1",
     "hono": "^4.13.1",

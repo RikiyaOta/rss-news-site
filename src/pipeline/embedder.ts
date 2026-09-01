@@ -30,6 +30,13 @@ export function l2Normalize(vector: Float32Array | number[]): Float32Array {
 
 /**
  * feature-extraction pipeline インスタンスを取得する（シングルトン管理、DI可能）
+ *
+ * NOTE: dtype は fp16 を使用する。@huggingface/transformers 4.x が同梱する
+ * onnxruntime-node 1.24.3 では、fp16 の Xenova/bge-m3 を読み込む際に
+ * グラフ最適化（SimplifiedLayerNormFusion とキャスト挿入の組み合わせ）が
+ * 失敗してセッション初期化ごと例外になるため、@huggingface/transformers は
+ * onnxruntime-node 1.21.0 を伴う 3.8.1 に固定している
+ * （.github/dependabot.yml で自動更新も除外済み）。
  */
 export async function getExtractor(customPipeline?: any): Promise<any> {
   if (customPipeline) {

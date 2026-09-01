@@ -13,6 +13,13 @@ updates:
       dependencies:
         patterns:
           - "*"
+    ignore:
+      # @huggingface/transformers 4.x は onnxruntime-node 1.24.3 を厳密固定しており、
+      # Xenova/bge-m3 の fp16 モデルを読み込む際に ONNX Runtime のグラフ最適化が
+      # 失敗する（SimplifiedLayerNormFusion + キャスト挿入の不整合）。
+      # 記事収集パイプラインが起動時に必ず落ちるため 3.8.1 に固定する。
+      # ONNX Runtime 側の修正を確認できたら、このエントリを外して追随する。
+      - dependency-name: "@huggingface/transformers"
 
   # Terraform プロバイダ・モジュールの週次更新
   - package-ecosystem: "terraform"
