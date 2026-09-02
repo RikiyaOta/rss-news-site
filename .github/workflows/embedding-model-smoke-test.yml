@@ -1,0 +1,45 @@
+name: Embedding Model Smoke Test
+
+# 実モデル (Xenova/bge-m3) を実際に読み込む統合スモークテスト。
+# ユニットテストは @huggingface/transformers をモックしているため、
+# onnxruntime-node の更新などでモデルが読み込めなくなる障害を検知できない。
+# 依存パッケージや埋め込み関連コードが変更される PR でのみ実行する。
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'src/pipeline/embedder.ts'
+      - 'src/pipeline/scorer.ts'
+      - 'tests/integration/**'
+      - 'vitest.integration.config.ts'
+      - '.github/workflows/embedding-model-smoke-test.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: リポジトリのチェックアウト
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: mise ツールのセットアップ
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      - name: pnpm store パスの取得
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: pnpm store のキャッシュ
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: 依存パッケージのインストール
+        run: pnpm install --frozen-lockfile
+
+      - name: 実モデル読み込みスモークテスト実行
+        run: pnpm test:integration

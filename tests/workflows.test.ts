@@ -8,7 +8,13 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
   const rootDir = path.resolve(__dirname, "..");
   const workflowsDir = path.join(rootDir, ".github", "workflows");
 
-  const workflowFiles = ["ci.yml", "fetch-and-score-pipeline.yml", "deploy.yml", "e2e.yml"];
+  const workflowFiles = [
+    "ci.yml",
+    "fetch-and-score-pipeline.yml",
+    "deploy.yml",
+    "e2e.yml",
+    "embedding-model-smoke-test.yml",
+  ];
 
   describe("ワークフローファイルの存在と YAML 構文検証", () => {
     for (const file of workflowFiles) {
@@ -209,6 +215,45 @@ describe("GitHub Actions ワークフローおよび pinact バージョン固�
       expect(content).toMatch(/playwright\s+install/);
       expect(content).toContain("E2E_REAL_MODEL");
       expect(content).toContain("pnpm test:e2e");
+    });
+  });
+
+  describe("埋め込みモデル スモークテストワークフロー (embedding-model-smoke-test.yml) の設定検証", () => {
+    it("依存パッケージおよび埋め込み関連コードの変更を対象とした pull_request トリガーが設定されていること", () => {
+      const filePath = path.join(workflowsDir, "embedding-model-smoke-test.yml");
+      const doc = yaml.load(fs.readFileSync(filePath, "utf-8")) as any;
+
+      expect(doc.on.pull_request).toBeDefined();
+      expect(doc.on.pull_request.branches).toContain("main");
+
+      const paths = doc.on.pull_request.paths ?? [];
+      expect(paths).toContain("pnpm-lock.yaml");
+      expect(paths).toContain("package.json");
+      expect(paths).toContain("src/pipeline/embedder.ts");
+      expect(doc.on.workflow_dispatch !== undefined).toBe(true);
+    });
+
+    it("実モデルを読み込む統合テスト (pnpm test:integration) が実行されること", () => {
+      const filePath = path.join(workflowsDir, "embedding-model-smoke-test.yml");
+      const content = fs.readFileSync(filePath, "utf-8");
+
+      expect(content).toContain("pnpm install --frozen-lockfile");
+      expect(content).toContain("pnpm test:integration");
+    });
+
+    it("package.json に test:integration スクリプトが定義されていること", () => {
+      const pkgPath = path.join(rootDir, "package.json");
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
+
+      expect(pkg.scripts["test:integration"]).toBeDefined();
+      expect(pkg.scripts["test:integration"]).toContain("vitest.integration.config.ts");
+    });
+
+    it("統合テストが既定のユニットテスト実行 (vitest.config.ts) から除外されていること", () => {
+      const configPath = path.join(rootDir, "vitest.config.ts");
+      const content = fs.readFileSync(configPath, "utf-8");
+
+      expect(content).toContain("tests/integration/**");
     });
   });
 
