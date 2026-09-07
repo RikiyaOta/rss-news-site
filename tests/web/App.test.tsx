@@ -222,4 +222,102 @@ describe("フロントエンド App コンポーネントのテスト", () => {
     expect(await screen.findByText("追加記事 1")).toBeDefined();
     expect(screen.getByText("記事 1")).toBeDefined();
   });
+
+  describe("モバイル横スワイプによる日付移動", () => {
+    function swipe(element: HTMLElement, fromX: number, toX: number, y = 400) {
+      fireEvent.touchStart(element, { touches: [{ clientX: fromX, clientY: y }] });
+      fireEvent.touchMove(element, { touches: [{ clientX: toX, clientY: y }] });
+      fireEvent.touchEnd(element, { changedTouches: [{ clientX: toX, clientY: y }] });
+    }
+
+    it("日別一覧を左にスワイプすると翌日の記事が読み込まれること", async () => {
+      render(<App initialDate="2026-08-19" />);
+
+      await screen.findByText("本日のおすすめAIニュース");
+
+      swipe(screen.getByTestId("daily-swipe-area"), 320, 100);
+
+      await waitFor(() => {
+        expect(apiClient.fetchDailyArticles).toHaveBeenCalledWith(
+          "2026-08-20",
+          expect.objectContaining({ limit: 30, offset: 0 }),
+        );
+      });
+
+      expect(screen.getByTestId("date-picker-input").getAttribute("value")).toBe("2026-08-20");
+    });
+
+    it("日別一覧を右にスワイプすると前日の記事が読み込まれること", async () => {
+      render(<App initialDate="2026-08-19" />);
+
+      await screen.findByText("本日のおすすめAIニュース");
+
+      swipe(screen.getByTestId("daily-swipe-area"), 100, 320);
+
+      await waitFor(() => {
+        expect(apiClient.fetchDailyArticles).toHaveBeenCalledWith(
+          "2026-08-18",
+          expect.objectContaining({ limit: 30, offset: 0 }),
+        );
+      });
+
+      expect(screen.getByTestId("date-picker-input").getAttribute("value")).toBe("2026-08-18");
+    });
+
+    it("縦スクロール操作では日付が変更されないこと", async () => {
+      render(<App initialDate="2026-08-19" />);
+
+      await screen.findByText("本日のおすすめAIニュース");
+      vi.mocked(apiClient.fetchDailyArticles).mockClear();
+
+      const area = screen.getByTestId("daily-swipe-area");
+      fireEvent.touchStart(area, { touches: [{ clientX: 300, clientY: 600 }] });
+      fireEvent.touchMove(area, { touches: [{ clientX: 240, clientY: 200 }] });
+      fireEvent.touchEnd(area, { changedTouches: [{ clientX: 240, clientY: 200 }] });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("date-picker-input").getAttribute("value")).toBe("2026-08-19");
+      });
+      expect(apiClient.fetchDailyArticles).not.toHaveBeenCalled();
+    });
+
+    it("当日を表示中は左スワイプしても翌日へ進まないこと", async () => {
+      // initialDate を渡さない場合は当日が表示され、翌日への移動が無効となる
+      render(<App />);
+
+      await screen.findByText("本日のおすすめAIニュース");
+      const todayValue = screen.getByTestId("date-picker-input").getAttribute("value");
+      vi.mocked(apiClient.fetchDailyArticles).mockClear();
+
+      swipe(screen.getByTestId("daily-swipe-area"), 320, 100);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("date-picker-input").getAttribute("value")).toBe(todayValue);
+      });
+      expect(apiClient.fetchDailyArticles).not.toHaveBeenCalled();
+    });
+
+    it("セマンティック検索モードではスワイプしても日付が変更されないこと", async () => {
+      render(<App initialDate="2026-08-19" />);
+
+      await screen.findByText("本日のおすすめAIニュース");
+
+      fireEvent.click(screen.getByRole("button", { name: /セマンティック検索/i }));
+      vi.mocked(apiClient.fetchDailyArticles).mockClear();
+
+      swipe(screen.getByTestId("daily-swipe-area"), 320, 100);
+
+      await waitFor(() => {
+        expect(apiClient.fetchDailyArticles).not.toHaveBeenCalled();
+      });
+    });
+
+    it("モバイル向けにスワイプ操作のヒントが表示されること", async () => {
+      render(<App initialDate="2026-08-19" />);
+
+      await screen.findByText("本日のおすすめAIニュース");
+
+      expect(screen.getByText(/スワイプ/)).toBeDefined();
+    });
+  });
 });

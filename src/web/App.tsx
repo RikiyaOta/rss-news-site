@@ -4,6 +4,7 @@ import { fetchDailyArticles, searchArticles } from "./lib/api-client";
 import { Header } from "./components/Header";
 import { SearchBar } from "./components/SearchBar";
 import { ArticleList } from "./components/ArticleList";
+import { useHorizontalSwipe } from "./hooks/useHorizontalSwipe";
 
 export interface AppProps {
   initialDate?: string;
@@ -100,6 +101,9 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
     loadDailyArticles(currentDate);
   }, [currentDate, loadDailyArticles]);
 
+  // 当日より先の日付へは進めない
+  const isNextDisabled = currentDate >= today && !initialDate;
+
   // 前日へ
   const handlePrevDay = () => {
     const prev = adjustDate(currentDate, -1);
@@ -108,6 +112,7 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
 
   // 翌日へ
   const handleNextDay = () => {
+    if (isNextDisabled) return;
     const next = adjustDate(currentDate, 1);
     setCurrentDate(next);
   };
@@ -155,6 +160,13 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
     setError(null);
   };
 
+  // モバイルでの横スワイプによる日付移動（左: 翌日へ / 右: 前日へ）
+  const swipeHandlers = useHorizontalSwipe({
+    onSwipeLeft: handleNextDay,
+    onSwipeRight: handlePrevDay,
+    enabled: mode === "daily",
+  });
+
   // 再試行
   const handleRetry = () => {
     if (mode === "daily") {
@@ -174,13 +186,23 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
         onNextDay={handleNextDay}
         onDateChange={handleDateChange}
         onModeChange={handleModeChange}
-        isNextDisabled={currentDate >= today && !initialDate}
+        isNextDisabled={isNextDisabled}
       />
 
       {/* メインコンテンツ */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* 日別記事一覧ビュー (CSS hidden による高速タブ切り替え) */}
-        <div className={mode === "daily" ? "block" : "hidden"}>
+        <div
+          className={mode === "daily" ? "block" : "hidden"}
+          data-testid="daily-swipe-area"
+          // 縦スクロールとピンチズームは維持しつつ、横方向はスワイプ操作に割り当てる
+          style={{ touchAction: "pan-y pinch-zoom" }}
+          {...swipeHandlers}
+        >
+          <p className="md:hidden mb-4 text-center text-[11px] text-zinc-400 dark:text-zinc-500">
+            左右にスワイプして前後の日付に移動できます
+          </p>
+
           <ArticleList
             articles={dailyArticles}
             isLoading={isLoading}

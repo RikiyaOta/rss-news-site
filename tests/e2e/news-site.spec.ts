@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 function getTodayJstString(): string {
   const now = new Date();
@@ -280,5 +280,113 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     // 過剰な DOM レンダリングがないことを検証 (ノード数 < 150)
     const domCount = await page.evaluate(() => document.querySelectorAll("*").length);
     expect(domCount).toBeLessThan(150);
+  });
+
+  test.describe("シナリオ 6: モバイル横スワイプによる日付移動", () => {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+    /**
+     * 日別一覧領域に対して実際の TouchEvent を発火させ、横スワイプを再現する
+     */
+    async function swipeDailyList(page: Page, fromX: number, toX: number) {
+      await page.evaluate(
+        ({ fromX, toX }) => {
+          const target = document.querySelector('[data-testid="daily-swipe-area"]');
+          if (!target) throw new Error("日別一覧のスワイプ領域が見つかりません");
+
+          const clientY = 400;
+          const createTouch = (clientX: number) =>
+            new Touch({ identifier: 1, target, clientX, clientY });
+
+          const dispatch = (type: string, touches: Touch[], changedTouches: Touch[]) => {
+            target.dispatchEvent(
+              new TouchEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                touches,
+                targetTouches: touches,
+                changedTouches,
+              }),
+            );
+          };
+
+          const start = createTouch(fromX);
+          const end = createTouch(toX);
+          dispatch("touchstart", [start], [start]);
+          dispatch("touchmove", [end], [end]);
+          dispatch("touchend", [], [end]);
+        },
+        { fromX, toX },
+      );
+    }
+
+    test("右スワイプで前日の記事一覧へ移動し、左スワイプで元の日付へ戻ること", async ({ page }) => {
+      await page.goto("/");
+
+      const dateInput = page.getByTestId("date-picker-input");
+      await expect(dateInput).toHaveValue(todayStr);
+      await expect(
+        page.getByText("AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能"),
+      ).toBeVisible();
+
+      // 右スワイプ → 前日へ
+      await swipeDailyList(page, 60, 320);
+      await expect(dateInput).toHaveValue(yesterdayStr);
+      await expect(page.getByText("前日の主要テクノロジートレンド総まとめ")).toBeVisible();
+
+      // 左スワイプ → 翌日（当日）へ戻る
+      await swipeDailyList(page, 320, 60);
+      await expect(dateInput).toHaveValue(todayStr);
+      await expect(
+        page.getByText("AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能"),
+      ).toBeVisible();
+    });
+
+    test("当日を表示中に左スワイプしても翌日へは進まないこと", async ({ page }) => {
+      await page.goto("/");
+
+      const dateInput = page.getByTestId("date-picker-input");
+      await expect(dateInput).toHaveValue(todayStr);
+
+      await swipeDailyList(page, 320, 60);
+
+      await expect(dateInput).toHaveValue(todayStr);
+    });
+
+    test("縦方向のスワイプ（スクロール操作）では日付が変更されないこと", async ({ page }) => {
+      await page.goto("/");
+
+      const dateInput = page.getByTestId("date-picker-input");
+      await expect(dateInput).toHaveValue(todayStr);
+
+      await page.evaluate(() => {
+        const target = document.querySelector('[data-testid="daily-swipe-area"]');
+        if (!target) throw new Error("日別一覧のスワイプ領域が見つかりません");
+
+        const createTouch = (clientX: number, clientY: number) =>
+          new Touch({ identifier: 1, target, clientX, clientY });
+
+        const dispatch = (type: string, touches: Touch[], changedTouches: Touch[]) => {
+          target.dispatchEvent(
+            new TouchEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              touches,
+              targetTouches: touches,
+              changedTouches,
+            }),
+          );
+        };
+
+        // 横 80px に対して縦 300px の移動（縦スクロール操作）
+        const start = createTouch(300, 600);
+        const end = createTouch(220, 300);
+        dispatch("touchstart", [start], [start]);
+        dispatch("touchmove", [end], [end]);
+        dispatch("touchend", [], [end]);
+      });
+
+      await expect(dateInput).toHaveValue(todayStr);
+    });
   });
 });
