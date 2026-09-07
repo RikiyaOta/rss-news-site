@@ -6,6 +6,11 @@ import { AlertCircle, RotateCcw, Inbox, Loader2, ChevronDown } from "lucide-reac
 
 export interface ArticleListProps {
   articles: (Article | SearchResultItem)[];
+  /**
+   * 件数表示に用いる総件数。読み込み済み件数ではなく全件数を渡す。
+   * 省略時は読み込み済みの件数を表示する。
+   */
+  total?: number;
   isLoading: boolean;
   error: string | null;
   emptyMessage?: string;
@@ -22,6 +27,7 @@ export interface ArticleListProps {
 
 export function ArticleList({
   articles,
+  total,
   isLoading,
   error,
   emptyMessage = "記事が見つかりませんでした",
@@ -140,7 +146,7 @@ export function ArticleList({
   return (
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 px-1">
-        <span>全 {articles.length} 件の記事</span>
+        <span>全 {total ?? articles.length} 件の記事</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

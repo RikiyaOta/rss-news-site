@@ -17,6 +17,13 @@ interface ArticlesApiResponse {
   articles: Article[];
 }
 
+export interface DailyArticlesResult {
+  /** 取得したページぶんの記事 */
+  articles: Article[];
+  /** ページネーションに関わらない、その日の全件数 */
+  total: number;
+}
+
 interface SearchApiResponse {
   query: string;
   total: number;
@@ -29,7 +36,7 @@ interface SearchApiResponse {
 export async function fetchDailyArticles(
   date: string,
   options: FetchArticlesOptions = {},
-): Promise<Article[]> {
+): Promise<DailyArticlesResult> {
   const { limit = 30, offset = 0, baseUrl = "" } = options;
   const url = `${baseUrl}/api/articles?date=${encodeURIComponent(date)}&limit=${limit}&offset=${offset}`;
 
@@ -48,7 +55,9 @@ export async function fetchDailyArticles(
   }
 
   const data = (await res.json()) as ArticlesApiResponse;
-  return data.articles || [];
+  const articles = data.articles || [];
+  // total が欠けている応答でも件数表示が壊れないよう、取得件数で代替する
+  return { articles, total: typeof data.total === "number" ? data.total : articles.length };
 }
 
 /**

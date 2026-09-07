@@ -75,7 +75,12 @@ function createInMemoryD1(): D1DatabaseLike & { _articles: ArticleRecord[] } {
           }
           return { success: true, meta: {} };
         },
-        async first<T = unknown>() {
+        async first<T = unknown>(colName?: string) {
+          if (query.includes("COUNT(*)")) {
+            const [dateJst] = boundValues as [string];
+            const count = articles.filter((a) => a.published_date_jst === dateJst).length;
+            return (colName === "total" ? count : { total: count }) as T;
+          }
           return null as T | null;
         },
       };
@@ -197,9 +202,18 @@ describe("Hono バックエンド API サーバー (src/server/index.ts) のテ�
       expect(res.status).toBe(200);
 
       const data = (await res.json()) as any;
-      expect(data.total).toBe(1);
       expect(data.articles).toHaveLength(1);
       expect(data.articles[0].id).toBe("art-1");
+    });
+
+    it("total はページ内の件数ではなく、その日の全件数を返すこと", async () => {
+      // 2026-08-20 には 2 件あるが、1 件だけ取得する
+      const res = await app.request("/api/articles?date=2026-08-20&limit=1&offset=0", {}, mockEnv);
+      expect(res.status).toBe(200);
+
+      const data = (await res.json()) as any;
+      expect(data.articles).toHaveLength(1);
+      expect(data.total).toBe(2);
     });
 
     it("記事が存在しない日付が指定された場合は空配列と total: 0 を返却すること", async () => {

@@ -9,6 +9,7 @@ import {
   cosineSimilarity,
   upsertArticles,
   getArticlesByPublishedDate,
+  countArticlesByPublishedDate,
   searchArticlesByVector,
   ArticleInput,
   D1DatabaseLike,
@@ -245,6 +246,68 @@ describe("D1 データベーススキーマ & クエリレイヤー (src/server/
       const results19 = await getArticlesByPublishedDate(mockD1, "2026-08-19");
       expect(results19).toHaveLength(1);
       expect(results19[0].id).toBe("art-3");
+    });
+
+    describe("countArticlesByPublishedDate (日別の全件数取得)", () => {
+      /** JST 2026-08-20 に 3 件、2026-08-19 に 1 件を投入する */
+      async function seedArticles() {
+        const vec = new Float32Array(1024).fill(0.1);
+        const articles: ArticleInput[] = [
+          {
+            id: "cnt-1",
+            title: "記事1",
+            url: "https://example.com/cnt-1",
+            source_name: "Source A",
+            score: 40,
+            published_at: "2026-08-20T01:00:00.000Z",
+            embedding: vec,
+          },
+          {
+            id: "cnt-2",
+            title: "記事2",
+            url: "https://example.com/cnt-2",
+            source_name: "Source B",
+            score: 95,
+            published_at: "2026-08-20T02:00:00.000Z",
+            embedding: vec,
+          },
+          {
+            id: "cnt-3",
+            title: "記事3",
+            url: "https://example.com/cnt-3",
+            source_name: "Source C",
+            score: 70,
+            published_at: "2026-08-19T20:00:00.000Z", // JST 2026-08-20
+            embedding: vec,
+          },
+          {
+            id: "cnt-4",
+            title: "前日記事",
+            url: "https://example.com/cnt-4",
+            source_name: "Source D",
+            score: 80,
+            published_at: "2026-08-19T10:00:00.000Z", // JST 2026-08-19
+            embedding: vec,
+          },
+        ];
+        await upsertArticles(mockD1, articles);
+      }
+
+      it("limit で絞り込んでも、その日の全件数を返すこと", async () => {
+        await seedArticles();
+
+        const paged = await getArticlesByPublishedDate(mockD1, "2026-08-20", { limit: 1 });
+        expect(paged).toHaveLength(1);
+
+        expect(await countArticlesByPublishedDate(mockD1, "2026-08-20")).toBe(3);
+        expect(await countArticlesByPublishedDate(mockD1, "2026-08-19")).toBe(1);
+      });
+
+      it("記事が存在しない日付の件数は 0 になること", async () => {
+        await seedArticles();
+
+        expect(await countArticlesByPublishedDate(mockD1, "2099-01-01")).toBe(0);
+      });
     });
 
     it("同一 URL の記事を再 upsert した場合に情報が更新され重複しないこと", async () => {

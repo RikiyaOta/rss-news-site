@@ -45,7 +45,10 @@ describe("フロントエンド App コンポーネントのテスト", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValue(mockDailyArticles);
+    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValue({
+      articles: mockDailyArticles,
+      total: mockDailyArticles.length,
+    });
     vi.mocked(apiClient.searchArticles).mockResolvedValue(mockSearchResults);
   });
 
@@ -160,7 +163,7 @@ describe("フロントエンド App コンポーネントのテスト", () => {
   });
 
   it("該当日の記事が0件の場合に空状態メッセージが表示されること", async () => {
-    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValueOnce([]);
+    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValueOnce({ articles: [], total: 0 });
 
     render(<App initialDate="2026-08-19" />);
 
@@ -176,7 +179,10 @@ describe("フロントエンド App コンポーネントのテスト", () => {
 
     expect(await screen.findByText(/ネットワーク接続エラー/)).toBeDefined();
 
-    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValueOnce(mockDailyArticles);
+    vi.mocked(apiClient.fetchDailyArticles).mockResolvedValueOnce({
+      articles: mockDailyArticles,
+      total: mockDailyArticles.length,
+    });
     const retryBtn = screen.getByRole("button", { name: /再試行/i });
     fireEvent.click(retryBtn);
 
@@ -207,9 +213,13 @@ describe("フロントエンド App コンポーネントのテスト", () => {
     }));
 
     // 前後日の先読みが挟まるため、日付とオフセットに応じて応答を返す
+    const totalForDate = initialArticles.length + moreArticles.length;
     vi.mocked(apiClient.fetchDailyArticles).mockImplementation(async (date, options) => {
-      if (date !== "2026-08-19") return [];
-      return (options?.offset ?? 0) === 0 ? initialArticles : moreArticles;
+      if (date !== "2026-08-19") return { articles: [], total: 0 };
+      return {
+        articles: (options?.offset ?? 0) === 0 ? initialArticles : moreArticles,
+        total: totalForDate,
+      };
     });
 
     render(<App initialDate="2026-08-19" />);
@@ -234,20 +244,86 @@ describe("フロントエンド App コンポーネントのテスト", () => {
     expect(screen.getByText("記事 1")).toBeDefined();
   });
 
+  it("件数表示は読み込み済み件数ではなく、その日の全件数を最初から示すこと", async () => {
+    const initialArticles: Article[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `art-initial-${i}`,
+      title: `記事 ${i + 1}`,
+      url: `https://example.com/art-${i}`,
+      source_name: "Source",
+      summary: `要約 ${i + 1}`,
+      score: 80,
+      published_at: "2026-08-19T00:00:00.000Z",
+    }));
+
+    const moreArticles: Article[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `art-more-${i}`,
+      title: `追加記事 ${i + 1}`,
+      url: `https://example.com/more-${i}`,
+      source_name: "Source",
+      summary: `追加要約 ${i + 1}`,
+      score: 70,
+      published_at: "2026-08-19T00:00:00.000Z",
+    }));
+
+    vi.mocked(apiClient.fetchDailyArticles).mockImplementation(async (date, options) => {
+      if (date !== "2026-08-19") return { articles: [], total: 0 };
+      return {
+        articles: (options?.offset ?? 0) === 0 ? initialArticles : moreArticles,
+        total: 40,
+      };
+    });
+
+    render(<App initialDate="2026-08-19" />);
+
+    // 30 件しか読み込んでいない時点で全 40 件と表示される
+    expect(await screen.findByText("全 40 件の記事")).toBeDefined();
+
+    fireEvent.click(await screen.findByRole("button", { name: /さらに読み込む/i }));
+
+    // 追加読み込み後も件数表示は変わらない
+    expect(await screen.findByText("追加記事 1")).toBeDefined();
+    expect(screen.getByText("全 40 件の記事")).toBeDefined();
+  });
+
+  it("全件を読み込み終えると「さらに読み込む」が表示されなくなること", async () => {
+    const articles: Article[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `art-${i}`,
+      title: `記事 ${i + 1}`,
+      url: `https://example.com/art-${i}`,
+      source_name: "Source",
+      summary: `要約 ${i + 1}`,
+      score: 80,
+      published_at: "2026-08-19T00:00:00.000Z",
+    }));
+
+    // ちょうど 30 件（= ページサイズ）で全件。余分な追加リクエストは発生しない
+    vi.mocked(apiClient.fetchDailyArticles).mockImplementation(async (date) =>
+      date === "2026-08-19" ? { articles, total: 30 } : { articles: [], total: 0 },
+    );
+
+    render(<App initialDate="2026-08-19" />);
+
+    expect(await screen.findByText("全 30 件の記事")).toBeDefined();
+    expect(screen.queryByRole("button", { name: /さらに読み込む/i })).toBeNull();
+  });
+
   describe("モバイルのページめくりによる日付移動", () => {
     /** 日付ごとに区別できる記事を返すモックを設定する */
     function mockArticlesByDate() {
-      vi.mocked(apiClient.fetchDailyArticles).mockImplementation(async (date) => [
-        {
-          id: `art-${date}`,
-          title: `${date} の記事`,
-          url: `https://example.com/${date}`,
-          source_name: "Source",
-          summary: `${date} の要約`,
-          score: 80,
-          published_at: `${date}T00:00:00.000Z`,
-        },
-      ]);
+      vi.mocked(apiClient.fetchDailyArticles).mockImplementation(async (date) => ({
+        articles: [
+          {
+            id: `art-${date}`,
+            title: `${date} の記事`,
+            url: `https://example.com/${date}`,
+            source_name: "Source",
+            summary: `${date} の要約`,
+            score: 80,
+            published_at: `${date}T00:00:00.000Z`,
+          },
+        ],
+        total: 1,
+      }));
     }
 
     function drag(fromX: number, toX: number, y = 400) {
@@ -348,11 +424,16 @@ describe("フロントエンド App コンポーネントのテスト", () => {
         expect(currentDateValue()).toBe("2026-08-18");
       });
       // 遷移先はキャッシュ済みのため、新たに取得されるのはその前日のみ
+      await waitFor(() => {
+        const requestedDates = vi
+          .mocked(apiClient.fetchDailyArticles)
+          .mock.calls.map((call) => call[0]);
+        expect(requestedDates).toContain("2026-08-17");
+      });
       const requestedDates = vi
         .mocked(apiClient.fetchDailyArticles)
         .mock.calls.map((call) => call[0]);
       expect(requestedDates).not.toContain("2026-08-18");
-      expect(requestedDates).toContain("2026-08-17");
     });
 
     it("縦スクロール操作では日付が変更されないこと", async () => {

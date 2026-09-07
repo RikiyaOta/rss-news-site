@@ -284,6 +284,18 @@ describe("フロントエンド React コンポーネントのテスト", () => 
       expect(screen.getAllByTestId("article-card")).toHaveLength(2);
     });
 
+    it("total を指定した場合、読み込み済み件数ではなく全件数が表示されること", () => {
+      render(<ArticleList articles={articles} total={57} isLoading={false} error={null} />);
+
+      expect(screen.getByText("全 57 件の記事")).toBeDefined();
+    });
+
+    it("total を省略した場合は読み込み済みの件数が表示されること", () => {
+      render(<ArticleList articles={articles} isLoading={false} error={null} />);
+
+      expect(screen.getByText("全 2 件の記事")).toBeDefined();
+    });
+
     it("ローディング中の場合、スケルトンまたはローディングスピナーが表示されること", () => {
       render(<ArticleList articles={[]} isLoading={true} error={null} />);
 

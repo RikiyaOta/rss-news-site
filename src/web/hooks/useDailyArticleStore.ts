@@ -4,6 +4,8 @@ import { fetchDailyArticles } from "../lib/api-client";
 
 export interface DailyPageState {
   articles: Article[];
+  /** 読み込み済み件数ではなく、その日の全件数 */
+  total: number;
   hasMore: boolean;
   isLoading: boolean;
   isLoadingMore: boolean;
@@ -13,6 +15,7 @@ export interface DailyPageState {
 /** 未取得の日付に対して返す初期状態（読み込み中として扱う） */
 export const INITIAL_DAILY_PAGE: DailyPageState = {
   articles: [],
+  total: 0,
   hasMore: false,
   isLoading: true,
   isLoadingMore: false,
@@ -67,7 +70,7 @@ export function useDailyArticleStore({
       }));
 
       try {
-        const articles = await fetchDailyArticles(date, {
+        const { articles, total } = await fetchDailyArticles(date, {
           limit: pageSize,
           offset: 0,
           baseUrl: apiBaseUrl,
@@ -76,7 +79,8 @@ export function useDailyArticleStore({
           ...prev,
           [date]: {
             articles,
-            hasMore: articles.length >= pageSize,
+            total,
+            hasMore: articles.length < total,
             isLoading: false,
             isLoadingMore: false,
             error: null,
@@ -118,7 +122,7 @@ export function useDailyArticleStore({
       );
 
       try {
-        const moreArticles = await fetchDailyArticles(date, {
+        const { articles: moreArticles, total } = await fetchDailyArticles(date, {
           limit: pageSize,
           offset,
           baseUrl: apiBaseUrl,
@@ -126,12 +130,15 @@ export function useDailyArticleStore({
         setPages((prev) => {
           const current = prev[date];
           if (!current) return prev;
+          const articles = [...current.articles, ...moreArticles];
           return {
             ...prev,
             [date]: {
               ...current,
-              articles: [...current.articles, ...moreArticles],
-              hasMore: moreArticles.length >= pageSize,
+              articles,
+              total,
+              // 追加取得が空だった場合も打ち切る（total が古い場合の保険）
+              hasMore: moreArticles.length > 0 && articles.length < total,
               isLoadingMore: false,
             },
           };
