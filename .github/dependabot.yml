@@ -9,10 +9,22 @@ updates:
       time: "09:00"
       timezone: "Asia/Tokyo"
     open-pull-requests-limit: 10
+    # mise の settings.minimum_release_age = "7d" と揃える。
+    # リリース直後の取り下げ・改ざんパッケージを掴まないための待機期間。
+    # 未設定の場合 github.com のデフォルトは 3 日なので、明示的に 7 日へ延ばす。
+    # なお cooldown はバージョン更新にのみ適用され、セキュリティ更新は遅延されない。
+    cooldown:
+      default-days: 7
     groups:
       dependencies:
         patterns:
           - "*"
+        # メジャー更新はグループに含めず単独 PR に分離する。
+        # 一括グループに混ぜると破壊的変更が他の更新に紛れて発見が遅れる
+        # （例: js-yaml 5.x の default export 廃止で CI が落ちた PR #37）。
+        update-types:
+          - "minor"
+          - "patch"
     ignore:
       # @huggingface/transformers 4.x は onnxruntime-node 1.24.3 を厳密固定しており、
       # Xenova/bge-m3 の fp16 モデルを読み込む際に ONNX Runtime のグラフ最適化が
@@ -30,6 +42,8 @@ updates:
       time: "09:00"
       timezone: "Asia/Tokyo"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   # GitHub Actions ワークフローの週次更新
   - package-ecosystem: "github-actions"
@@ -40,3 +54,5 @@ updates:
       time: "09:00"
       timezone: "Asia/Tokyo"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
