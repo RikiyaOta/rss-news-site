@@ -12,9 +12,9 @@ const DEFAULT_THRESHOLD_PX = 60;
 const DEFAULT_DIRECTION_RATIO = 1.5;
 
 export interface UseHorizontalSwipeOptions {
-  /** 左方向（指を左へ動かす）へスワイプしたときのコールバック */
+  /** 左方向（指を右から左へ動かす）へスワイプしたときのコールバック */
   onSwipeLeft?: () => void;
-  /** 右方向（指を右へ動かす）へスワイプしたときのコールバック */
+  /** 右方向（指を左から右へ動かす）へスワイプしたときのコールバック */
   onSwipeRight?: () => void;
   /** スワイプとみなす最小の横移動量 (px)。既定値は 60 */
   threshold?: number;

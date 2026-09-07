@@ -160,10 +160,11 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
     setError(null);
   };
 
-  // モバイルでの横スワイプによる日付移動（左: 翌日へ / 右: 前日へ）
+  // モバイルでの横スワイプによる日付移動。
+  // ヘッダーの矢印ボタンと同じ向き（指を左へ動かす = 「←前日」/ 指を右へ動かす = 「翌日→」）に対応させる。
   const swipeHandlers = useHorizontalSwipe({
-    onSwipeLeft: handleNextDay,
-    onSwipeRight: handlePrevDay,
+    onSwipeLeft: handlePrevDay,
+    onSwipeRight: handleNextDay,
     enabled: mode === "daily",
   });
 
@@ -199,10 +200,6 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
           style={{ touchAction: "pan-y pinch-zoom" }}
           {...swipeHandlers}
         >
-          <p className="md:hidden mb-4 text-center text-[11px] text-zinc-400 dark:text-zinc-500">
-            左右にスワイプして前後の日付に移動できます
-          </p>
-
           <ArticleList
             articles={dailyArticles}
             isLoading={isLoading}

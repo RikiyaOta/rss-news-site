@@ -320,7 +320,9 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
       );
     }
 
-    test("右スワイプで前日の記事一覧へ移動し、左スワイプで元の日付へ戻ること", async ({ page }) => {
+    test("指を右から左へ動かすと前日へ移動し、左から右へ動かすと元の日付へ戻ること", async ({
+      page,
+    }) => {
       await page.goto("/");
 
       const dateInput = page.getByTestId("date-picker-input");
@@ -329,26 +331,26 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
         page.getByText("AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能"),
       ).toBeVisible();
 
-      // 右スワイプ → 前日へ
-      await swipeDailyList(page, 60, 320);
+      // 指を右から左へ → 前日へ
+      await swipeDailyList(page, 320, 60);
       await expect(dateInput).toHaveValue(yesterdayStr);
       await expect(page.getByText("前日の主要テクノロジートレンド総まとめ")).toBeVisible();
 
-      // 左スワイプ → 翌日（当日）へ戻る
-      await swipeDailyList(page, 320, 60);
+      // 指を左から右へ → 翌日（当日）へ戻る
+      await swipeDailyList(page, 60, 320);
       await expect(dateInput).toHaveValue(todayStr);
       await expect(
         page.getByText("AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能"),
       ).toBeVisible();
     });
 
-    test("当日を表示中に左スワイプしても翌日へは進まないこと", async ({ page }) => {
+    test("当日を表示中に指を左から右へ動かしても翌日へは進まないこと", async ({ page }) => {
       await page.goto("/");
 
       const dateInput = page.getByTestId("date-picker-input");
       await expect(dateInput).toHaveValue(todayStr);
 
-      await swipeDailyList(page, 320, 60);
+      await swipeDailyList(page, 60, 320);
 
       await expect(dateInput).toHaveValue(todayStr);
     });

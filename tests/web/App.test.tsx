@@ -230,12 +230,12 @@ describe("フロントエンド App コンポーネントのテスト", () => {
       fireEvent.touchEnd(element, { changedTouches: [{ clientX: toX, clientY: y }] });
     }
 
-    it("日別一覧を左にスワイプすると翌日の記事が読み込まれること", async () => {
+    it("指を左から右へ動かすと翌日の記事が読み込まれること", async () => {
       render(<App initialDate="2026-08-19" />);
 
       await screen.findByText("本日のおすすめAIニュース");
 
-      swipe(screen.getByTestId("daily-swipe-area"), 320, 100);
+      swipe(screen.getByTestId("daily-swipe-area"), 100, 320);
 
       await waitFor(() => {
         expect(apiClient.fetchDailyArticles).toHaveBeenCalledWith(
@@ -247,12 +247,12 @@ describe("フロントエンド App コンポーネントのテスト", () => {
       expect(screen.getByTestId("date-picker-input").getAttribute("value")).toBe("2026-08-20");
     });
 
-    it("日別一覧を右にスワイプすると前日の記事が読み込まれること", async () => {
+    it("指を右から左へ動かすと前日の記事が読み込まれること", async () => {
       render(<App initialDate="2026-08-19" />);
 
       await screen.findByText("本日のおすすめAIニュース");
 
-      swipe(screen.getByTestId("daily-swipe-area"), 100, 320);
+      swipe(screen.getByTestId("daily-swipe-area"), 320, 100);
 
       await waitFor(() => {
         expect(apiClient.fetchDailyArticles).toHaveBeenCalledWith(
@@ -281,7 +281,7 @@ describe("フロントエンド App コンポーネントのテスト", () => {
       expect(apiClient.fetchDailyArticles).not.toHaveBeenCalled();
     });
 
-    it("当日を表示中は左スワイプしても翌日へ進まないこと", async () => {
+    it("当日を表示中は翌日方向へスワイプしても日付が進まないこと", async () => {
       // initialDate を渡さない場合は当日が表示され、翌日への移動が無効となる
       render(<App />);
 
@@ -289,7 +289,7 @@ describe("フロントエンド App コンポーネントのテスト", () => {
       const todayValue = screen.getByTestId("date-picker-input").getAttribute("value");
       vi.mocked(apiClient.fetchDailyArticles).mockClear();
 
-      swipe(screen.getByTestId("daily-swipe-area"), 320, 100);
+      swipe(screen.getByTestId("daily-swipe-area"), 100, 320);
 
       await waitFor(() => {
         expect(screen.getByTestId("date-picker-input").getAttribute("value")).toBe(todayValue);
@@ -305,19 +305,11 @@ describe("フロントエンド App コンポーネントのテスト", () => {
       fireEvent.click(screen.getByRole("button", { name: /セマンティック検索/i }));
       vi.mocked(apiClient.fetchDailyArticles).mockClear();
 
-      swipe(screen.getByTestId("daily-swipe-area"), 320, 100);
+      swipe(screen.getByTestId("daily-swipe-area"), 100, 320);
 
       await waitFor(() => {
         expect(apiClient.fetchDailyArticles).not.toHaveBeenCalled();
       });
-    });
-
-    it("モバイル向けにスワイプ操作のヒントが表示されること", async () => {
-      render(<App initialDate="2026-08-19" />);
-
-      await screen.findByText("本日のおすすめAIニュース");
-
-      expect(screen.getByText(/スワイプ/)).toBeDefined();
     });
   });
 });
