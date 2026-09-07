@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { Article, SearchResultItem } from "../shared/types";
-import { fetchDailyArticles, searchArticles } from "./lib/api-client";
+import type { RefObject } from "react";
+import { SearchResultItem } from "../shared/types";
+import { searchArticles } from "./lib/api-client";
 import { Header } from "./components/Header";
 import { SearchBar } from "./components/SearchBar";
 import { ArticleList } from "./components/ArticleList";
-import { useHorizontalSwipe } from "./hooks/useHorizontalSwipe";
+import { DailyPager } from "./components/DailyPager";
+import { useDailyArticleStore } from "./hooks/useDailyArticleStore";
 
 export interface AppProps {
   initialDate?: string;
@@ -43,78 +45,47 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
   const [currentDate, setCurrentDate] = useState<string>(initialDate || today);
   const [mode, setMode] = useState<"daily" | "search">("daily");
 
-  const [dailyArticles, setDailyArticles] = useState<Article[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
-
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
-  const [hasMoreDaily, setHasMoreDaily] = useState<boolean>(false);
-
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  // 日別記事一覧の初回取得
-  const loadDailyArticles = useCallback(
-    async (date: string) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const articles = await fetchDailyArticles(date, {
-          limit: PAGE_SIZE,
-          offset: 0,
-          baseUrl: apiBaseUrl,
-        });
-        setDailyArticles(articles);
-        setHasMoreDaily(articles.length >= PAGE_SIZE);
-      } catch (err: any) {
-        setError(err?.message || "日別記事の取得に失敗しました");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [apiBaseUrl],
-  );
+  const { getPage, ensurePage, reloadPage, loadMore } = useDailyArticleStore({
+    pageSize: PAGE_SIZE,
+    apiBaseUrl,
+  });
 
-  // 追加記事の読み込み（無限スクロール / ページネーション）
-  const handleLoadMore = useCallback(async () => {
-    if (isLoadingMore || !hasMoreDaily) return;
-
-    setIsLoadingMore(true);
-    try {
-      const moreArticles = await fetchDailyArticles(currentDate, {
-        limit: PAGE_SIZE,
-        offset: dailyArticles.length,
-        baseUrl: apiBaseUrl,
-      });
-      setDailyArticles((prev) => [...prev, ...moreArticles]);
-      setHasMoreDaily(moreArticles.length >= PAGE_SIZE);
-    } catch (err: any) {
-      setError(err?.message || "追加記事の取得に失敗しました");
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [currentDate, dailyArticles.length, hasMoreDaily, isLoadingMore, apiBaseUrl]);
-
-  // 初期ロードおよび日付変更時の記事取得
-  useEffect(() => {
-    loadDailyArticles(currentDate);
-  }, [currentDate, loadDailyArticles]);
+  const prevDate = adjustDate(currentDate, -1);
+  const nextDate = adjustDate(currentDate, 1);
 
   // 当日より先の日付へは進めない
   const isNextDisabled = currentDate >= today && !initialDate;
 
+  // 表示中の日付を取得したうえで、めくった先で即座に描画できるよう前後の日付も先読みする
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      await ensurePage(currentDate);
+      if (cancelled) return;
+      void ensurePage(prevDate);
+      if (!isNextDisabled) {
+        void ensurePage(nextDate);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentDate, prevDate, nextDate, isNextDisabled, ensurePage]);
+
   // 前日へ
   const handlePrevDay = () => {
-    const prev = adjustDate(currentDate, -1);
-    setCurrentDate(prev);
+    setCurrentDate(prevDate);
   };
 
   // 翌日へ
   const handleNextDay = () => {
     if (isNextDisabled) return;
-    const next = adjustDate(currentDate, 1);
-    setCurrentDate(next);
+    setCurrentDate(nextDate);
   };
 
   // 日付直接変更
@@ -130,7 +101,7 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
     if (!trimmed) return;
 
     setIsSearching(true);
-    setError(null);
+    setSearchError(null);
     setMode("search");
 
     try {
@@ -140,7 +111,7 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
       });
       setSearchResults(results);
     } catch (err: any) {
-      setError(err?.message || "検索処理中にエラーが発生しました");
+      setSearchError(err?.message || "検索処理中にエラーが発生しました");
     } finally {
       setIsSearching(false);
     }
@@ -151,34 +122,43 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
     setSearchQuery("");
     setSearchResults([]);
     setMode("daily");
-    setError(null);
+    setSearchError(null);
   };
 
   // モード切替
   const handleModeChange = (newMode: "daily" | "search") => {
     setMode(newMode);
-    setError(null);
   };
 
-  // モバイルでの横スワイプによる日付移動。
-  // ヘッダーの矢印ボタンと同じ向き（指を左へ動かす = 「←前日」/ 指を右へ動かす = 「翌日→」）に対応させる。
-  const swipeHandlers = useHorizontalSwipe({
-    onSwipeLeft: handlePrevDay,
-    onSwipeRight: handleNextDay,
-    enabled: mode === "daily",
-  });
-
-  // 再試行
-  const handleRetry = () => {
-    if (mode === "daily") {
-      loadDailyArticles(currentDate);
-    } else {
-      handleSearch();
-    }
-  };
+  // 日別ページの内容。ページめくり中は前後の日付ぶんも同時に描画される
+  const renderDailyPage = useCallback(
+    (date: string, scrollRootRef: RefObject<HTMLElement | null>) => {
+      const page = getPage(date);
+      return (
+        <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <ArticleList
+            articles={page.articles}
+            isLoading={page.isLoading}
+            error={page.error}
+            emptyMessage={`${date} の記事はまだありません`}
+            onRetry={() => {
+              void reloadPage(date);
+            }}
+            hasMore={page.hasMore}
+            isLoadingMore={page.isLoadingMore}
+            onLoadMore={() => {
+              void loadMore(date);
+            }}
+            scrollRootRef={scrollRootRef}
+          />
+        </div>
+      );
+    },
+    [getPage, reloadPage, loadMore],
+  );
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 flex flex-col font-sans antialiased selection:bg-blue-500 selection:text-white">
+    <div className="h-dvh flex flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans antialiased selection:bg-blue-500 selection:text-white">
       {/* ヘッダー */}
       <Header
         currentDate={currentDate}
@@ -190,49 +170,44 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
         isNextDisabled={isNextDisabled}
       />
 
-      {/* メインコンテンツ */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* 日別記事一覧ビュー (CSS hidden による高速タブ切り替え) */}
-        <div
-          className={mode === "daily" ? "block" : "hidden"}
-          data-testid="daily-swipe-area"
-          // 縦スクロールとピンチズームは維持しつつ、横方向はスワイプ操作に割り当てる
-          style={{ touchAction: "pan-y pinch-zoom" }}
-          {...swipeHandlers}
-        >
-          <ArticleList
-            articles={dailyArticles}
-            isLoading={isLoading}
-            error={mode === "daily" ? error : null}
-            emptyMessage={`${currentDate} の記事はまだありません`}
-            onRetry={handleRetry}
-            hasMore={hasMoreDaily}
-            isLoadingMore={isLoadingMore}
-            onLoadMore={handleLoadMore}
+      {/* メインコンテンツ (CSS hidden による高速タブ切り替え) */}
+      <main className="flex-1 min-h-0 w-full">
+        {/* 日別記事一覧ビュー */}
+        <div className={mode === "daily" ? "h-full" : "hidden"}>
+          <DailyPager
+            currentDate={currentDate}
+            prevDate={prevDate}
+            nextDate={nextDate}
+            canGoNext={!isNextDisabled}
+            onDateChange={setCurrentDate}
+            renderPage={renderDailyPage}
+            enabled={mode === "daily"}
           />
         </div>
 
-        {/* セマンティック検索ビュー (CSS hidden による高速タブ切り替え) */}
-        <div className={mode === "search" ? "block" : "hidden"}>
-          <SearchBar
-            query={searchQuery}
-            onQueryChange={setSearchQuery}
-            onSearch={handleSearch}
-            onClear={handleClearSearch}
-            isLoading={isSearching}
-          />
+        {/* セマンティック検索ビュー */}
+        <div className={mode === "search" ? "h-full overflow-y-auto overscroll-contain" : "hidden"}>
+          <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <SearchBar
+              query={searchQuery}
+              onQueryChange={setSearchQuery}
+              onSearch={handleSearch}
+              onClear={handleClearSearch}
+              isLoading={isSearching}
+            />
 
-          <ArticleList
-            articles={searchResults}
-            isLoading={isSearching}
-            error={mode === "search" ? error : null}
-            emptyMessage={
-              searchQuery
-                ? `「${searchQuery}」に一致する記事は見つかりませんでした`
-                : "自然言語キーワードを入力して記事を検索してください"
-            }
-            onRetry={handleRetry}
-          />
+            <ArticleList
+              articles={searchResults}
+              isLoading={isSearching}
+              error={searchError}
+              emptyMessage={
+                searchQuery
+                  ? `「${searchQuery}」に一致する記事は見つかりませんでした`
+                  : "自然言語キーワードを入力して記事を検索してください"
+              }
+              onRetry={handleSearch}
+            />
+          </div>
         </div>
       </main>
 

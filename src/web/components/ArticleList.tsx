@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import type { RefObject } from "react";
 import { Article, SearchResultItem } from "../../shared/types";
 import { ArticleCard } from "./ArticleCard";
 import { AlertCircle, RotateCcw, Inbox, Loader2, ChevronDown } from "lucide-react";
@@ -12,6 +13,11 @@ export interface ArticleListProps {
   hasMore?: boolean;
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
+  /**
+   * 無限スクロール監視の基準となるスクロール領域。
+   * 省略時はビューポートを基準とする。
+   */
+  scrollRootRef?: RefObject<HTMLElement | null>;
 }
 
 export function ArticleList({
@@ -23,12 +29,21 @@ export function ArticleList({
   hasMore = false,
   isLoadingMore = false,
   onLoadMore,
+  scrollRootRef,
 }: ArticleListProps) {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // 監視の再構築を避けるため、最新のコールバックは ref 経由で参照する
+  const onLoadMoreRef = useRef(onLoadMore);
+  useEffect(() => {
+    onLoadMoreRef.current = onLoadMore;
+  });
+
+  const canLoadMore = hasMore && !isLoadingMore && !!onLoadMore;
+
   // IntersectionObserver による無限スクロール監視
   useEffect(() => {
-    if (!hasMore || isLoadingMore || !onLoadMore) return;
+    if (!canLoadMore) return;
 
     if (typeof IntersectionObserver === "undefined") return;
 
@@ -38,17 +53,17 @@ export function ArticleList({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          onLoadMore();
+          onLoadMoreRef.current?.();
         }
       },
-      { rootMargin: "200px" },
+      { root: scrollRootRef?.current ?? null, rootMargin: "200px" },
     );
 
     observer.observe(sentinel);
     return () => {
       observer.disconnect();
     };
-  }, [hasMore, isLoadingMore, onLoadMore]);
+  }, [canLoadMore, scrollRootRef]);
 
   // ローディング状態（初回ロード）
   if (isLoading) {

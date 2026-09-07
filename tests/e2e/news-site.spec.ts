@@ -282,20 +282,32 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     expect(domCount).toBeLessThan(150);
   });
 
-  test.describe("シナリオ 6: モバイル横スワイプによる日付移動", () => {
+  test.describe("シナリオ 6: モバイルのページめくりによる日付移動", () => {
     test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
 
-    /**
-     * 日別一覧領域に対して実際の TouchEvent を発火させ、横スワイプを再現する
-     */
-    async function swipeDailyList(page: Page, fromX: number, toX: number) {
-      await page.evaluate(
-        ({ fromX, toX }) => {
-          const target = document.querySelector('[data-testid="daily-swipe-area"]');
-          if (!target) throw new Error("日別一覧のスワイプ領域が見つかりません");
+    interface DragOptions {
+      /** 指を離すかどうか。false の場合はドラッグ途中の状態で止める */
+      release?: boolean;
+      /** 縦方向の移動量 */
+      deltaY?: number;
+    }
 
-          const clientY = 400;
-          const createTouch = (clientX: number) =>
+    /**
+     * 日別一覧領域に対して実際の TouchEvent を発火させ、横方向のドラッグを再現する
+     */
+    async function dragDailyList(
+      page: Page,
+      fromX: number,
+      toX: number,
+      options: DragOptions = {},
+    ) {
+      await page.evaluate(
+        ({ fromX, toX, release, deltaY }) => {
+          const target = document.querySelector('[data-testid="daily-swipe-area"]');
+          if (!target) throw new Error("日別一覧のドラッグ領域が見つかりません");
+
+          const startY = 400;
+          const createTouch = (clientX: number, clientY: number) =>
             new Touch({ identifier: 1, target, clientX, clientY });
 
           const dispatch = (type: string, touches: Touch[], changedTouches: Touch[]) => {
@@ -310,49 +322,125 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
             );
           };
 
-          const start = createTouch(fromX);
-          const end = createTouch(toX);
+          const start = createTouch(fromX, startY);
+          const end = createTouch(toX, startY + deltaY);
           dispatch("touchstart", [start], [start]);
           dispatch("touchmove", [end], [end]);
-          dispatch("touchend", [], [end]);
+          if (release) {
+            dispatch("touchend", [], [end]);
+          }
         },
-        { fromX, toX },
+        { fromX, toX, release: options.release ?? true, deltaY: options.deltaY ?? 0 },
       );
     }
 
-    test("指を右から左へ動かすと前日へ移動し、左から右へ動かすと元の日付へ戻ること", async ({
+    const todayHeadline = "AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能";
+    const yesterdayHeadline = "前日の主要テクノロジートレンド総まとめ";
+
+    /** トラックの transform から横方向の移動量 (px) を取り出す */
+    async function getTrackOffsetX(page: Page): Promise<number> {
+      const transform = await page
+        .getByTestId("daily-pager-track")
+        .evaluate((el) => (el as HTMLElement).style.transform);
+      const matched = /translate3d\((-?[\d.]+)px/.exec(transform);
+      if (!matched) throw new Error(`予期しない transform 値です: ${transform}`);
+      return Number(matched[1]);
+    }
+
+    test("指を左から右へ動かすと前日へ移動し、右から左へ動かすと元の日付へ戻ること", async ({
       page,
     }) => {
       await page.goto("/");
 
       const dateInput = page.getByTestId("date-picker-input");
       await expect(dateInput).toHaveValue(todayStr);
-      await expect(
-        page.getByText("AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能"),
-      ).toBeVisible();
+      await expect(page.getByText(todayHeadline)).toBeVisible();
 
-      // 指を右から左へ → 前日へ
-      await swipeDailyList(page, 320, 60);
+      // 指を左から右へ = ページを右へ押す = 左側にある前日が現れる
+      await dragDailyList(page, 60, 320);
       await expect(dateInput).toHaveValue(yesterdayStr);
-      await expect(page.getByText("前日の主要テクノロジートレンド総まとめ")).toBeVisible();
+      await expect(page.getByText(yesterdayHeadline)).toBeVisible();
 
-      // 指を左から右へ → 翌日（当日）へ戻る
-      await swipeDailyList(page, 60, 320);
+      // 指を右から左へ = 右側にある翌日（当日）へ戻る
+      await dragDailyList(page, 320, 60);
       await expect(dateInput).toHaveValue(todayStr);
-      await expect(
-        page.getByText("AI RSS News Dashboard 正式リリースと多言語ベクトル検索機能"),
-      ).toBeVisible();
+      await expect(page.getByText(todayHeadline)).toBeVisible();
     });
 
-    test("当日を表示中に指を左から右へ動かしても翌日へは進まないこと", async ({ page }) => {
+    test("めくっている最中は遷移元と遷移先の両方のページが見えていること", async ({ page }) => {
+      await page.goto("/");
+
+      await expect(page.getByText(todayHeadline)).toBeVisible();
+      // 静止時は隣接する日付のページは描画されていない
+      await expect(page.getByText(yesterdayHeadline)).toHaveCount(0);
+
+      const width = await page
+        .getByTestId("daily-swipe-area")
+        .evaluate((el) => (el as HTMLElement).offsetWidth);
+
+      // 指を離さず 100px だけ右へ動かした状態で止める
+      await dragDailyList(page, 60, 160, { release: false });
+
+      const track = page.getByTestId("daily-pager-track");
+      await expect(track).toHaveAttribute("data-pager-phase", "dragging");
+
+      // 遷移元（当日）と遷移先（前日）が同時に見えている
+      await expect(page.getByText(todayHeadline)).toBeVisible();
+      await expect(page.getByText(yesterdayHeadline)).toBeVisible();
+
+      // ページ全体が指の移動量ぶんだけ追従している
+      expect(await getTrackOffsetX(page)).toBe(100 - width);
+
+      // 日付はまだ確定していない
+      await expect(page.getByTestId("date-picker-input")).toHaveValue(todayStr);
+    });
+
+    test("移動量がしきい値に満たない場合は元のページへ戻ること", async ({ page }) => {
       await page.goto("/");
 
       const dateInput = page.getByTestId("date-picker-input");
       await expect(dateInput).toHaveValue(todayStr);
 
-      await swipeDailyList(page, 60, 320);
+      // ページ幅の 25% に満たない 40px のみ移動
+      await dragDailyList(page, 60, 100);
 
+      await expect(page.getByTestId("daily-pager-track")).toHaveAttribute(
+        "data-pager-phase",
+        "idle",
+      );
       await expect(dateInput).toHaveValue(todayStr);
+      await expect(page.getByText(todayHeadline)).toBeVisible();
+    });
+
+    test("当日を表示中に翌日方向へめくっても日付が進まないこと", async ({ page }) => {
+      await page.goto("/");
+
+      const dateInput = page.getByTestId("date-picker-input");
+      await expect(dateInput).toHaveValue(todayStr);
+
+      await dragDailyList(page, 320, 60);
+
+      await expect(page.getByTestId("daily-pager-track")).toHaveAttribute(
+        "data-pager-phase",
+        "idle",
+      );
+      await expect(dateInput).toHaveValue(todayStr);
+    });
+
+    test("翌日へ進めない方向のドラッグには抵抗がかかること", async ({ page }) => {
+      await page.goto("/");
+
+      await expect(page.getByTestId("date-picker-input")).toHaveValue(todayStr);
+
+      const width = await page
+        .getByTestId("daily-swipe-area")
+        .evaluate((el) => (el as HTMLElement).offsetWidth);
+
+      // 指を離さず 100px 左へ動かす
+      await dragDailyList(page, 320, 220, { release: false });
+
+      // 移動量 -100px に抵抗係数 0.3 が適用され -30px となる
+      expect(await getTrackOffsetX(page)).toBe(-30 - width);
     });
 
     test("縦方向のスワイプ（スクロール操作）では日付が変更されないこと", async ({ page }) => {
@@ -361,34 +449,26 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
       const dateInput = page.getByTestId("date-picker-input");
       await expect(dateInput).toHaveValue(todayStr);
 
-      await page.evaluate(() => {
-        const target = document.querySelector('[data-testid="daily-swipe-area"]');
-        if (!target) throw new Error("日別一覧のスワイプ領域が見つかりません");
+      // 横 80px に対して縦 300px の移動（縦スクロール操作）
+      await dragDailyList(page, 300, 220, { deltaY: -300 });
 
-        const createTouch = (clientX: number, clientY: number) =>
-          new Touch({ identifier: 1, target, clientX, clientY });
-
-        const dispatch = (type: string, touches: Touch[], changedTouches: Touch[]) => {
-          target.dispatchEvent(
-            new TouchEvent(type, {
-              bubbles: true,
-              cancelable: true,
-              touches,
-              targetTouches: touches,
-              changedTouches,
-            }),
-          );
-        };
-
-        // 横 80px に対して縦 300px の移動（縦スクロール操作）
-        const start = createTouch(300, 600);
-        const end = createTouch(220, 300);
-        dispatch("touchstart", [start], [start]);
-        dispatch("touchmove", [end], [end]);
-        dispatch("touchend", [], [end]);
-      });
-
+      await expect(page.getByTestId("daily-pager-track")).toHaveAttribute(
+        "data-pager-phase",
+        "idle",
+      );
       await expect(dateInput).toHaveValue(todayStr);
+    });
+
+    test("各日付のページが独立した縦スクロール領域として描画されること", async ({ page }) => {
+      await page.goto("/");
+
+      await expect(page.getByText(todayHeadline)).toBeVisible();
+
+      const overflowY = await page
+        .getByTestId("daily-pager-page")
+        .nth(1)
+        .evaluate((el) => getComputedStyle(el).overflowY);
+      expect(overflowY).toBe("auto");
     });
   });
 });
