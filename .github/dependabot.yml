@@ -9,6 +9,12 @@ updates:
       time: "09:00"
       timezone: "Asia/Tokyo"
     open-pull-requests-limit: 10
+    # mise の settings.minimum_release_age = "7d" と揃える。
+    # リリース直後の取り下げ・改ざんパッケージを掴まないための待機期間。
+    # 未設定の場合 github.com のデフォルトは 3 日なので、明示的に 7 日へ延ばす。
+    # なお cooldown はバージョン更新にのみ適用され、セキュリティ更新は遅延されない。
+    cooldown:
+      default-days: 7
     groups:
       dependencies:
         patterns:
@@ -30,6 +36,8 @@ updates:
       time: "09:00"
       timezone: "Asia/Tokyo"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
 
   # GitHub Actions ワークフローの週次更新
   - package-ecosystem: "github-actions"
@@ -40,3 +48,5 @@ updates:
       time: "09:00"
       timezone: "Asia/Tokyo"
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
