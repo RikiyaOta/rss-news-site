@@ -48,7 +48,32 @@ describe("API クライアント (api-client.ts) のテスト", () => {
       expect(callUrl).toContain("limit=30");
       expect(callUrl).toContain("offset=0");
 
-      expect(result).toEqual(mockArticles);
+      expect(result).toEqual({ articles: mockArticles, total: 1 });
+    });
+
+    it("ページ内の件数ではなく、レスポンスの total（その日の全件数）を返却すること", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ date: "2026-08-20", total: 42, articles: mockArticles }),
+      });
+
+      const result = await fetchDailyArticles("2026-08-20", { limit: 1 });
+
+      expect(result.articles).toHaveLength(1);
+      expect(result.total).toBe(42);
+    });
+
+    it("レスポンスに total が含まれない場合は取得件数で代替すること", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ date: "2026-08-20", articles: mockArticles }),
+      });
+
+      const result = await fetchDailyArticles("2026-08-20");
+
+      expect(result.total).toBe(mockArticles.length);
     });
 
     it("カスタムオプション（limit, offset, baseUrl）が正しく URL に反映されること", async () => {
@@ -74,7 +99,7 @@ describe("API クライアント (api-client.ts) のテスト", () => {
       expect(callUrl).toBe(
         "https://api.example.com/api/articles?date=2026-08-20&limit=10&offset=20",
       );
-      expect(result).toEqual(mockArticles);
+      expect(result).toEqual({ articles: mockArticles, total: 1 });
     });
 
     it("レスポンスの articles フィールドが空または存在しない場合に空配列を返却すること", async () => {
@@ -85,7 +110,7 @@ describe("API クライアント (api-client.ts) のテスト", () => {
       });
 
       const result = await fetchDailyArticles("2026-08-20");
-      expect(result).toEqual([]);
+      expect(result).toEqual({ articles: [], total: 0 });
     });
 
     it("HTTP エラーレスポンス（ステータス 500）の場合にエラーメッセージ付きで例外をスローすること", async () => {

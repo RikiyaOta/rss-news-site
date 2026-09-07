@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
   getArticlesByPublishedDate,
+  countArticlesByPublishedDate,
   searchArticlesByVector,
   D1DatabaseLike,
 } from "./db/articles.ts";
@@ -78,14 +79,18 @@ app.get("/api/articles", async (c) => {
   const limit = limitParam ? parseInt(limitParam, 10) : 50;
   const offset = offsetParam ? parseInt(offsetParam, 10) : 0;
 
-  const articles = await getArticlesByPublishedDate(c.env.DB, date, {
-    limit: isNaN(limit) ? 50 : limit,
-    offset: isNaN(offset) ? 0 : offset,
-  });
+  // total はページ内の件数ではなく、その日の全件数を返す
+  const [articles, total] = await Promise.all([
+    getArticlesByPublishedDate(c.env.DB, date, {
+      limit: isNaN(limit) ? 50 : limit,
+      offset: isNaN(offset) ? 0 : offset,
+    }),
+    countArticlesByPublishedDate(c.env.DB, date),
+  ]);
 
   return c.json({
     date,
-    total: articles.length,
+    total,
     articles,
   });
 });

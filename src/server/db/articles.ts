@@ -193,6 +193,25 @@ export async function getArticlesByPublishedDate(
 }
 
 /**
+ * 指定した JST 公開日 (YYYY-MM-DD) の記事の総件数を取得する。
+ * ページネーションの有無に関わらず、その日の全件数を返す。
+ */
+export async function countArticlesByPublishedDate(
+  db: D1DatabaseLike | any,
+  dateJst: string,
+): Promise<number> {
+  const query = `
+    SELECT COUNT(*) AS total
+    FROM articles
+    WHERE published_date_jst = ?
+  `.trim();
+
+  const total = await db.prepare(query).bind(dateJst).first("total");
+  const parsed = Number(total ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
  * クエリベクトルとのコサイン類似度が高い上位記事を検索・ソートして取得する
  */
 export async function searchArticlesByVector(

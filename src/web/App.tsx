@@ -138,6 +138,7 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
         <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <ArticleList
             articles={page.articles}
+            total={page.total}
             isLoading={page.isLoading}
             error={page.error}
             emptyMessage={`${date} の記事はまだありません`}

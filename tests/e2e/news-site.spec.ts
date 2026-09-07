@@ -252,6 +252,54 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     ).toBeVisible();
   });
 
+  test("シナリオ 4-2: 追加読み込みを行っても件数表示が全件数のまま変わらないこと", async ({
+    page,
+  }) => {
+    const pagedArticles = Array.from({ length: 45 }, (_, i) => ({
+      id: `art-paged-${i}`,
+      title: `ページング記事 ${i + 1}`,
+      url: `https://example.com/paged-${i}`,
+      source_name: "Paged Source",
+      summary: `ページング記事 ${i + 1} の要約`,
+      score: 90 - i,
+      published_at: `${todayStr}T08:00:00.000Z`,
+    }));
+
+    // 全 45 件を 30 件ずつ返す（beforeEach のルートを上書きする）
+    await page.route("**/api/articles*", async (route) => {
+      const url = new URL(route.request().url());
+      const date = url.searchParams.get("date") || todayStr;
+      const limit = Number(url.searchParams.get("limit") ?? 30);
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      const all = date === todayStr ? pagedArticles : [];
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          date,
+          total: all.length,
+          articles: all.slice(offset, offset + limit),
+        }),
+      });
+    });
+
+    await page.goto("/");
+
+    // 30 件しか読み込んでいない時点で全 45 件と表示されること
+    await expect(page.getByText("全 45 件の記事")).toBeVisible();
+    await expect(page.getByTestId("article-card")).toHaveCount(30);
+
+    await page.getByRole("button", { name: /さらに読み込む/ }).click();
+
+    // 追加読み込み後も件数表示は変わらないこと
+    await expect(page.getByTestId("article-card")).toHaveCount(45);
+    await expect(page.getByText("全 45 件の記事")).toBeVisible();
+
+    // 全件読み込み済みのため追加読み込みの導線が消えること
+    await expect(page.getByRole("button", { name: /さらに読み込む/ })).toHaveCount(0);
+  });
+
   test("シナリオ 5: レスポンシブモバイル表示（幅375px）でレイアウト崩れなく主要コンポーネントが表示されること", async ({
     page,
   }) => {
@@ -279,6 +327,9 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
 
     // フッターを持たず、画面要素が最小限に保たれていること
     await expect(page.locator("footer")).toHaveCount(0);
+
+    // 件数表示は読み込み済み件数（= 全件）と一致すること
+    await expect(page.getByText(`全 ${todayArticles.length} 件の記事`)).toBeVisible();
 
     // モバイル幅でもタイトルとモード切替タブが同一行に収まっていること
     const headingBox = await heading.boundingBox();
