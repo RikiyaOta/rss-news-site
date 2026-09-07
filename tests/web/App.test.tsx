@@ -64,7 +64,16 @@ describe("フロントエンド App コンポーネントのテスト", () => {
 
     expect(await screen.findByText("本日のおすすめAIニュース")).toBeDefined();
     expect(screen.getByText("TypeScript 5.8の注目変更点")).toBeDefined();
-    expect(screen.getByText("AI RSS News Dashboard")).toBeDefined();
+    expect(screen.getByText("RSS News for Me")).toBeDefined();
+  });
+
+  it("フッターが描画されず、ヘッダーと記事一覧のみで構成されること", async () => {
+    const { container } = render(<App initialDate="2026-08-19" />);
+
+    await screen.findByText("本日のおすすめAIニュース");
+
+    expect(container.querySelector("footer")).toBeNull();
+    expect(screen.queryByText(/Powered by/i)).toBeNull();
   });
 
   it("前日ボタンをクリックすると日付が1日戻り、該当日の記事が読み込まれること", async () => {

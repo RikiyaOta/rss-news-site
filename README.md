@@ -1,6 +1,6 @@
-# AI RSS News & Semantic Search
+# RSS News for Me
 
-完全無料で運用可能な、AI駆動型の個人向けニュース収集・要約・セマンティック検索ダッシュボードシステムです。
+完全無料で運用可能な、個人向けのニュース収集・スコアリング・セマンティック検索システムです。
 
 GitHub Actions による自動巡回（実行スケジュールは `.github/workflows/fetch-and-score-pipeline.yml` を参照）で最新の技術記事を収集し、多言語ベクトルモデル（`BAAI/bge-m3`）による興味関心スコアリングとメタデータ抽出を行い、Cloudflare D1 に同期。Cloudflare Workers（Static Assets + Hono）と Workers AI（`@cf/baai/bge-m3`）を活用して、高速な日別記事配信と自然言語セマンティック検索を提供します。
 

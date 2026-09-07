@@ -210,14 +210,6 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
           </div>
         </div>
       </main>
-
-      {/* フッター */}
-      <footer className="border-t border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-900/50 py-6 text-center text-xs text-zinc-500 dark:text-zinc-400">
-        <p>
-          AI RSS News &amp; Semantic Search &bull; Powered by Cloudflare Workers, D1 &amp; Workers
-          AI (BGE-M3)
-        </p>
-      </footer>
     </div>
   );
 }

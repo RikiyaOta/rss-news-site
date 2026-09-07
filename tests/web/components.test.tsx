@@ -183,7 +183,7 @@ describe("フロントエンド React コンポーネントのテスト", () => 
         />,
       );
 
-      expect(screen.getByText(/AI RSS News Dashboard/i)).toBeDefined();
+      expect(screen.getByText(/RSS News for Me/i)).toBeDefined();
       expect(screen.getByRole("button", { name: /前日/i })).toBeDefined();
       expect(screen.getByRole("button", { name: /翌日/i })).toBeDefined();
       expect(screen.getByRole("button", { name: /セマンティック検索/i })).toBeDefined();
@@ -213,6 +213,44 @@ describe("フロントエンド React コンポーネントのテスト", () => 
 
       const nextBtn = screen.getByRole("button", { name: /翌日/i }) as HTMLButtonElement;
       expect(nextBtn.disabled).toBe(true);
+    });
+
+    it("ヘッダーにはタイトルのみが置かれ、ロゴアイコンや説明文が描画されないこと", () => {
+      const { container } = render(
+        <Header
+          currentDate="2026-08-19"
+          mode="daily"
+          onPrevDay={() => {}}
+          onNextDay={() => {}}
+          onDateChange={() => {}}
+          onModeChange={() => {}}
+        />,
+      );
+
+      const heading = screen.getByRole("heading", { level: 1 });
+      expect(heading.textContent).toBe("RSS News for Me");
+
+      // 説明文（サイトの解説テキスト）が存在しないこと
+      expect(container.querySelector("header p")).toBeNull();
+      // ロゴアイコンが存在しないこと（残る svg は日付・モード操作のアイコンのみ）
+      expect(heading.querySelector("svg")).toBeNull();
+      expect(screen.queryByText(/BGE-M3|Cloudflare/i)).toBeNull();
+    });
+
+    it("検索タブは表示を「検索」と短くしつつ、支援技術には正式名称を伝えること", () => {
+      render(
+        <Header
+          currentDate="2026-08-19"
+          mode="daily"
+          onPrevDay={() => {}}
+          onNextDay={() => {}}
+          onDateChange={() => {}}
+          onModeChange={() => {}}
+        />,
+      );
+
+      const searchTab = screen.getByRole("button", { name: "セマンティック検索" });
+      expect(searchTab.textContent).toBe("検索");
     });
   });
 
