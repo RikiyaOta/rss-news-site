@@ -236,6 +236,22 @@ describe("フロントエンド React コンポーネントのテスト", () => 
       expect(heading.querySelector("svg")).toBeNull();
       expect(screen.queryByText(/BGE-M3|Cloudflare/i)).toBeNull();
     });
+
+    it("検索タブは表示を「検索」と短くしつつ、支援技術には正式名称を伝えること", () => {
+      render(
+        <Header
+          currentDate="2026-08-19"
+          mode="daily"
+          onPrevDay={() => {}}
+          onNextDay={() => {}}
+          onDateChange={() => {}}
+          onModeChange={() => {}}
+        />,
+      );
+
+      const searchTab = screen.getByRole("button", { name: "セマンティック検索" });
+      expect(searchTab.textContent).toBe("検索");
+    });
   });
 
   describe("ArticleList コンポーネント", () => {

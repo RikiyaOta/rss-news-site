@@ -280,6 +280,16 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     // フッターを持たず、画面要素が最小限に保たれていること
     await expect(page.locator("footer")).toHaveCount(0);
 
+    // モバイル幅でもタイトルとモード切替タブが同一行に収まっていること
+    const headingBox = await heading.boundingBox();
+    const searchTabBox = await page
+      .getByRole("button", { name: "セマンティック検索" })
+      .boundingBox();
+    if (!headingBox || !searchTabBox) throw new Error("ヘッダー要素の位置を取得できませんでした");
+    const headingCenterY = headingBox.y + headingBox.height / 2;
+    const searchTabCenterY = searchTabBox.y + searchTabBox.height / 2;
+    expect(Math.abs(headingCenterY - searchTabCenterY)).toBeLessThan(8);
+
     // 過剰な DOM レンダリングがないことを検証 (ノード数 < 150)
     const domCount = await page.evaluate(() => document.querySelectorAll("*").length);
     expect(domCount).toBeLessThan(150);
