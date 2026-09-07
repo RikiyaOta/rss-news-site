@@ -135,8 +135,8 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
   test("シナリオ 1: トップページ表示と日別ニュース一覧が正常に表示されること", async ({ page }) => {
     await page.goto("/");
 
-    // 1. タイトル「AI RSS News Dashboard」が表示されること
-    const heading = page.getByRole("heading", { level: 1, name: /AI RSS News Dashboard/ });
+    // 1. タイトル「RSS News for Me」が表示されること
+    const heading = page.getByRole("heading", { level: 1, name: /RSS News for Me/ });
     await expect(heading).toBeVisible();
 
     // 2. 日付ナビゲーションとカレンダーピッカーが表示されること
@@ -260,7 +260,7 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
     await page.goto("/");
 
     // ヘッダーとタイトルが表示されていること
-    const heading = page.getByRole("heading", { level: 1, name: /AI RSS News Dashboard/ });
+    const heading = page.getByRole("heading", { level: 1, name: /RSS News for Me/ });
     await expect(heading).toBeVisible();
 
     // 日付ピッカーとナビゲーションが表示されていること
@@ -276,6 +276,9 @@ test.describe("AI RSS News サイトの E2E 結合検証", () => {
         .first()
         .getByText(/Cloudflare Workers Static AssetsとHono、D1を活用したサーバーレス構成/),
     ).toBeVisible();
+
+    // フッターを持たず、画面要素が最小限に保たれていること
+    await expect(page.locator("footer")).toHaveCount(0);
 
     // 過剰な DOM レンダリングがないことを検証 (ノード数 < 150)
     const domCount = await page.evaluate(() => document.querySelectorAll("*").length);

@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Calendar, Search, Newspaper, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, Search } from "lucide-react";
 
 export interface HeaderProps {
   currentDate: string;
@@ -20,26 +20,12 @@ export function Header({
   isNextDisabled = false,
 }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-30 w-full border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* ロゴ・タイトル */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-blue-600 text-white shadow-sm shadow-blue-500/20">
-            <Newspaper className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-lg md:text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-              <span>AI RSS News Dashboard</span>
-              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
-                <Sparkles className="w-2.5 h-2.5" />
-                Workers AI &amp; BGE-M3
-              </span>
-            </h1>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Cloudflare Workers &amp; D1 による高速配信 &amp; セマンティック検索
-            </p>
-          </div>
-        </div>
+    <header className="w-full border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* タイトル */}
+        <h1 className="text-lg md:text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          RSS News for Me
+        </h1>
 
         {/* コントロール群 */}
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
