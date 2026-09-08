@@ -200,13 +200,52 @@ Playwright
   → 実 /api/search（Workers AI 部分のみ差し替え）
 ```
 
+**どこまでがローカルエミュレーションか:**
+
+`wrangler dev` は既定でローカルモードで動き、**workerd（本番と同じランタイム）と Miniflare が
+Worker 本体・D1・静的アセット配信をローカルでエミュレートする**。
+D1 は `.wrangler/state` 配下のローカル SQLite ファイルになり、Cloudflare アカウントには一切アクセスしない。
+つまり **PR ごとの E2E は Cloudflare の無料枠を 1 ミリも消費しない**。
+
+ただし **Workers AI だけは例外**で、[ローカル開発でも常にリモートの Cloudflare アカウントへ
+リクエストが送られ、利用量としてカウントされる](https://developers.cloudflare.com/workers/development-testing/bindings-per-env)。
+`wrangler dev` でローカルにエミュレートすることはできない。
+これは本案が「PR ではスタブ」を採る理由が、単に動かせないからだけでなく、
+**課金・認証の観点でもそうすべき**という裏付けになる。
+
 **Workers AI の扱い（2 段構え）:**
 
-- **PR（毎回）**: `wrangler dev`（ローカル）では Workers AI バインディングが使えないため、
-  `c.env.AI` が無い場合に決定論的なダミーベクトルを返す薄い口を用意する（`src/server/ai.ts` にラップし、
-  E2E 用の設定でのみスタブが有効になるようにする）。これで **Hono・D1・SQL・ビルド・アセット配信は全部本物**になる。
-- **nightly**: `wrangler dev --remote` で **本物の Workers AI** を叩き、検索の実挙動まで通す。
+- **PR（毎回）**: `c.env.AI` を薄くラップし（`src/server/ai.ts`）、E2E 用設定では決定論的なダミーベクトルを
+  返すスタブに差し替える。これで **Hono・D1・実 SQL・本番ビルド・アセット配信は全部本物**、
+  かつ **Cloudflare 利用量ゼロ・シークレット不要**。
+- **nightly**: **AI バインディングだけを remote にする**（Wrangler の
+  [remote bindings](https://github.com/cloudflare/workers-sdk/discussions/9660) 機能で
+  `AI` に `remote: true` を付ける）。D1 はローカルのシード済み SQLite のまま。
   → 死んでいた `E2E_REAL_MODEL` フラグを、本来の意味（実 AI を使うか否か）で復活させる。
+
+> **重要**: nightly を `wrangler dev --remote`（全バインディングをリモート化）にしてはいけない。
+> それをすると **本番 D1 に接続してしまい**、(a) 実データに依存してアサーションが非決定的になる、
+> (b) 誤って本番データへ書き込むリスクがある、(c) 行読み取りが無料枠を消費する、の 3 点で不利益しかない。
+> **リモートにするのは AI バインディング 1 つだけ。**
+
+**無料枠への影響（試算）:**
+
+| 項目 | 数値 | 出典 |
+|---|---|---|
+| Workers AI 無料枠 | **10,000 Neurons / 日**（00:00 UTC リセット） | [Workers AI Pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/) |
+| `@cf/baai/bge-m3` の単価 | **1,075 Neurons / 100万入力トークン** | 同上 |
+| → 無料枠で処理できる入力量 | 約 **930 万トークン / 日** | 計算 |
+| nightly E2E の検索クエリ | 5 クエリ × 約 10 トークン = 50 トークン | 想定 |
+| **nightly E2E の消費量** | **約 0.05 Neurons / 日（無料枠の 0.0005%）** | 計算 |
+
+**結論: Workers AI のコストは実質ゼロ。** 仮に nightly で 1,000 クエリ投げても約 11 Neurons で、
+無料枠の 0.1% に届かない。心配は不要。
+
+**D1 側**（PR・nightly ともローカルなので消費なし。参考値）:
+無料枠は **1 日あたり 5,000,000 行読み取り / 100,000 行書き込み / ストレージ 5GB**。
+なお **2026-09-01 以降、Workers Free プランでは上限を超えた D1 クエリはエラーを返すようになった**
+（[Changelog](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/)）ため、
+本番側の行読み取り量には別途注意が必要（→ 6.1 参照）。
 
 **あわせて:**
 
@@ -270,7 +309,7 @@ describe("calculateScoreFromSimilarity の区分境界", () => {
 | `tests/toolchain.test.ts` | **廃止（6件）** | 設定ファイルの自己言及。`mise install` / `pnpm install --frozen-lockfile` が CI で成功することが本来の検証。 |
 | `tests/terraform.test.ts` | **廃止（15件）** | `terraform validate` / `fmt -check` は既に `ci.yml` にある。「Worker を Terraform に定義しない」設計意図は `main.tf` のコメントと AGENTS.md で足りる。 |
 | `tests/workflows.test.ts` | **廃止（38件）** | `actionlint` + `pinact:check`（CI ステップ）へ置換。テスト内 `execSync("mise ...")` は環境依存で現に失敗している。 |
-| `tests/pipeline/db.test.ts` | **廃止（15件）** | 死んだコードのテスト。`src/pipeline/db.ts` の未使用 export 8 個ごと削除。ローカル SQLite 出力自体が不要なら `index.ts` からも外す（**要判断**）。 |
+| `tests/pipeline/db.test.ts` | **廃止（15件）** | 死んだコードのテスト。**`src/pipeline/db.ts` をモジュールごと削除**し、`index.ts` からローカル SQLite 書き込みも外す（判断済み）。 |
 | `tests/server/api.test.ts` | **作り直し（12件）** | 手書き偽装 D1 を廃止し、L3 Worker 結合（workerd + 実 D1 + migrations）へ移設。`limit/offset` 異常値・`extractEmbeddingVector` の全形状を追加。 |
 | `tests/server/articles-db.test.ts` | **維持＋強化（20件）** | better-sqlite3 で実 SQL を叩いており健全。スキーマを `migrations/` から読むよう変更。`countArticlesByPublishedDate` の `offset` 超過ケース等を追加。 |
 | `tests/pipeline/fetcher.test.ts` | **維持（45件）** | 本レビューで最も質が高い。公開日時フォールバック・未来日付・HTML 除去など境界が丁寧。`it.each` 化で更に読みやすくできる程度。 |
@@ -297,13 +336,25 @@ describe("calculateScoreFromSimilarity の区分境界", () => {
 | Step | 内容 | 効果 |
 |---|---|---|
 | 1 | `toolchain` / `terraform` / `workflows` テスト削除 + `actionlint` を CI に追加 | 59 件削減、CI 安定化（現に落ちているケースの解消） |
-| 2 | `src/pipeline/db.ts` の死んだ export と `db.test.ts` を削除（ローカル SQLite 自体の要否を判断） | 15 件削減、カバレッジの実態化 |
+| 2 | `src/pipeline/db.ts` と `db.test.ts` を削除し、`index.ts` からローカル SQLite 書き込みを除去。`better-sqlite3` の依存も見直し | 15 件削減、カバレッジの実態化、依存削減 |
 | 3 | スキーマを `migrations/` に一本化。`schema.sql` / `SCHEMA_STATEMENTS` を統合 | 本番との乖離を構造的に解消 |
 | 4 | JST 日付ロジックを `src/shared/date.ts` に集約し、固定時刻で境界テスト | 3 重実装の解消と最重要境界の担保 |
 | 5 | `@cloudflare/vitest-pool-workers` で L3 Worker 結合を新設、`api.test.ts` を移設 | 実 SQL・実バインディングの検証を獲得 |
 | 6 | 境界値のテーブル駆動化（スコア区分 / limit・offset / AI レスポンス形状 / バッジ色） | 網羅性が一目で分かる |
-| 7 | E2E を `wrangler dev` + 実 D1 + 本番ビルドへ。PR で smoke、nightly で `--remote` full | 「実環境に近い」の実現、デグレード検知 |
-| 8 | ディレクトリを `unit / component / integration / e2e` に再編、カバレッジ閾値を設定 | 方針がディレクトリ構造として自明になる |
+| 7 | E2E を `wrangler dev`（ローカル workerd + ローカル D1 + 本番ビルド）へ。PR で smoke（AI スタブ）、nightly で AI のみ remote binding の full | 「実環境に近い」の実現、デグレード検知。無料枠消費はほぼゼロ |
+| 8 | ディレクトリを `unit / component / integration / e2e` に再編、カバレッジ閾値（`lines 90 / branches 80`、中核モジュールのみ 100%）を設定 | 方針がディレクトリ構造として自明になる |
+
+### 5.1 補足: 本番側の D1 行読み取りに注意（テスト外の指摘）
+
+`searchArticlesByVector` は **`WHERE embedding IS NOT NULL` で全記事を取得し、
+コサイン類似度を Worker 側で計算している**（`src/server/db/articles.ts`）。
+つまり **検索 1 回につき記事テーブルの全行を読む**。
+
+2026-09-01 から Workers Free プランでは D1 の 1 日 500 万行読み取りを超えるとクエリがエラーになるため、
+記事が蓄積するほど「検索 N 回 × 全記事数」で上限に近づく。
+個人利用の頻度なら当面問題ないが、**アーカイブが 1 万件を超えたあたりから意識が必要**。
+本レビューの対象外だが、無料枠を気にされているので併記する。
+将来的な対策は Vectorize への移行か、`published_date_jst` での期間絞り込みなど。
 
 ---
 
@@ -330,14 +381,14 @@ describe("calculateScoreFromSimilarity の区分境界", () => {
 
 ---
 
-## 7. 判断が必要な点
+## 7. 判断結果（2026-09-08 確定）
 
-1. **`src/pipeline/db.ts`（ローカル SQLite）は消してよいか。**
-   現状 GitHub Actions の使い捨てランナー上にファイルを書くだけで、誰も読んでいない。
-   デバッグ用に残す意図があるなら残すが、その場合もテストは 1〜2 件で足りる。
-2. **E2E で Workers AI をどう扱うか。**
-   本案は「PR ではスタブ（`c.env.AI` を差し替え可能にする最小の変更）、nightly では `--remote` で本物」。
-   本物のみに寄せると PR で回せず、スタブのみだと検索経路の実挙動が検証できない。
-3. **カバレッジ閾値を CI のゲートにするか。**
-   数値を目的化すると P2 のような水増しを誘発するため、`lines 90 / branches 80` 程度の下限に留め、
-   日付・スコアリングなど中核モジュールのみ 100% を要求する、という運用を推奨。
+| # | 論点 | 判断 |
+|---|---|---|
+| 1 | `src/pipeline/db.ts`（ローカル SQLite）の扱い | **削除する。** モジュールごと消し、`src/pipeline/index.ts` からローカル DB 書き込みを除去。`better-sqlite3` は L3 Pipeline テストのヘルパーとしてのみ残るか、不要なら依存ごと削除。 |
+| 2 | E2E での Workers AI の扱い | **2 段構えを採用（3.2 参照）。** PR は完全ローカル（AI スタブ、Cloudflare 利用量ゼロ）。nightly は **AI バインディングのみ** `remote: true`、D1 はローカルのまま。`wrangler dev --remote` による全リモート化は採らない。 |
+| 3 | カバレッジ閾値 | **下限のみ CI ゲートにする。** 全体 `lines 90 / branches 80`、日付・スコアリングなど中核モジュールのみ 100%。数値そのものを目標にはしない。 |
+
+**コスト面の結論:** PR ごとの E2E は 100% ローカルエミュレーション（workerd + Miniflare の D1）で
+**無料枠を一切消費しない**。nightly も Workers AI を約 0.05 Neurons/日（無料枠 10,000 の 0.0005%）使うだけで、
+実質的にコストゼロ。詳細な試算は 3.2 の表を参照。
