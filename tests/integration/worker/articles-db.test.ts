@@ -215,6 +215,71 @@ describe("D1 クエリレイヤー (src/server/db/articles) の結合テスト",
       expect(results.map((r) => r.id)).toEqual(["high"]);
     });
 
+    it.each([[0], [-1]])(
+      "limit が %s のときは空配列を返し、クエリを発行しないこと",
+      async (limit) => {
+        expect(await searchArticlesByVector(env.DB, queryVec, { limit })).toEqual([]);
+      },
+    );
+
+    it("レスポンスに created_at を含めないこと", async () => {
+      const results = await searchArticlesByVector(env.DB, queryVec, { limit: 10 });
+      expect(results.length).toBeGreaterThan(0);
+      for (const result of results) {
+        expect(result).not.toHaveProperty("created_at");
+      }
+    });
+
+    it("類似度が同値の場合はスコア降順になること", async () => {
+      await env.DB.prepare("DELETE FROM articles").run();
+
+      const shared = new Float32Array(1024);
+      shared[0] = 1.0;
+      await upsertArticles(env.DB, [
+        article({ id: "tie-low", url: "https://example.com/t/1", score: 10, embedding: shared }),
+        article({ id: "tie-high", url: "https://example.com/t/2", score: 90, embedding: shared }),
+        article({ id: "tie-mid", url: "https://example.com/t/3", score: 50, embedding: shared }),
+      ]);
+
+      const results = await searchArticlesByVector(env.DB, queryVec, { limit: 10 });
+      expect(results.map((r) => r.id)).toEqual(["tie-high", "tie-mid", "tie-low"]);
+    });
+
+    it("上位のみを保持する実装が、全件ソートした結果と一致すること", async () => {
+      await env.DB.prepare("DELETE FROM articles").run();
+
+      // 決定論的な擬似乱数で 60 件のベクトルを作る
+      let seed = 12345;
+      const random = () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+      };
+
+      const seeded = Array.from({ length: 60 }, (_, i) => {
+        const vec = new Float32Array(1024);
+        for (let d = 0; d < 1024; d++) vec[d] = random() * 2 - 1;
+        return article({
+          id: `rand-${i}`,
+          url: `https://example.com/r/${i}`,
+          score: Math.floor(random() * 100),
+          embedding: vec,
+        });
+      });
+      await upsertArticles(env.DB, seeded);
+
+      // 全件取得して素朴に並べ替えたものを期待値とする
+      const all = await searchArticlesByVector(env.DB, queryVec, { limit: seeded.length });
+      const expected = [...all]
+        .sort((a, b) =>
+          b.similarity !== a.similarity ? b.similarity - a.similarity : b.score - a.score,
+        )
+        .slice(0, 5)
+        .map((r) => r.id);
+
+      const topFive = await searchArticlesByVector(env.DB, queryVec, { limit: 5 });
+      expect(topFive.map((r) => r.id)).toEqual(expected);
+    });
+
     it("D1 が BLOB をバイト配列で返し、deserializeVector が 1024 次元へ復元できること", async () => {
       const row = await env.DB.prepare("SELECT embedding FROM articles WHERE id = 'high'").first<{
         embedding: number[];
