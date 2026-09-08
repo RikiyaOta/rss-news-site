@@ -18,17 +18,53 @@
 
 ## 2. テスト規約 & 品質基準
 
-* **テストケース名の完全日本語化:**
-  * Vitest および Playwright のすべてのテストケース名（`describe`, `it`, `test` の第1引数）およびアサーションメッセージは **すべて日本語** で記述してください。
-* **テスト実行コマンド:**
-  * ユニットテスト: `pnpm test`
-  * カバレッジ計測: `pnpm test:coverage`
-  * 型チェック: `pnpm typecheck` (`tsc --noEmit`)
-  * E2Eテスト: `pnpm test:e2e`
-* **テスト駆動開発 (TDD):**
-  * 新規機能・修正時は必ず失敗するテスト（Red）を作成してから実装（Green）し、リファクタリング（Refactor）を行ってください。
+### 2.1 テストの対象
 
----
+* テストは **プロダクトの振る舞い** のみを対象とします。
+* `package.json` / `mise.toml` / `*.tf` / `.github/workflows/*.yml` など、**リポジトリの設定ファイルの内容を文字列マッチで検証するテストを書いてはいけません。** 設定の妥当性は、そのツールを実際に実行する CI ステップ（`terraform validate` / `pinact:check` / `pnpm build` / `wrangler dev`）で担保します。
+* `src` から参照されていないコード（死んだ export）にテストを書かないでください。見つけた場合はテストではなくコードごと削除します。
+
+### 2.2 レイヤーとモック境界
+
+各テストは以下のいずれか 1 層に属し、**モック境界はその層に定義されたものだけ**とします。多重にモックすると、どの層も実際には繋がっていない状態になります。
+
+| 層 | 置き場所 | 実行コマンド | モックするもの |
+|---|---|---|---|
+| L1 ユニット | `tests/unit/**` | `pnpm test` | なし |
+| L2 コンポーネント | `tests/component/**` | `pnpm test` | `api-client` のみ |
+| L3 結合 (Pipeline) | `tests/integration/pipeline/**` | `pnpm test` | 外部 HTTP と埋め込みモデル |
+| L3 結合 (Worker) | `tests/integration/worker/**` | `pnpm test:worker` | なし（workerd + 実 D1） |
+| L3 結合 (Model) | `tests/integration/model/**` | `pnpm test:integration` | なし（実モデル） |
+| L4 E2E | `tests/e2e/**` | `pnpm test:e2e` | Workers AI のみ |
+
+* **L4 E2E で API をモックしてはいけません。** `wrangler dev` が本番と同じ workerd 上で Hono を起動し、D1（ローカル SQLite に本番と同じ migrations を適用）と `pnpm build` の生成物を配信します。
+* **Workers AI だけは例外**です。ローカルでエミュレートできず、呼び出すと実アカウントへリクエストが飛んで課金対象になるため、`tests/e2e/worker-entry.ts` で決定論的なスタブに差し替えます。実モデルの精度は L3 (Model) と nightly で担保します。
+* **同じ振る舞いを 2 層で重複検証しないでください。** 上位層は「経路が繋がっていること」だけを確認します。
+
+### 2.3 スキーマとカバレッジ
+
+* `articles` テーブルのスキーマは **`migrations/` が唯一の正**です。テストもここから読み込みます。他の場所にスキーマを複製しないでください。
+* カバレッジは下限のみを CI ゲートにします（全体 `lines 90 / branches 85`、`src/shared/date.ts` は 100%）。数値そのものを目標にはしません。
+* `src/server/**` は workerd 上で実行されるため V8 カバレッジを収集できません。カバレッジ計測の対象からは外し、品質は L3 (Worker) テストの通過で担保します。
+
+### 2.4 テストケースの書き方
+
+* **テストケース名はすべて日本語**で記述してください（`describe` / `it` / `test` の第1引数、およびアサーションメッセージ）。
+* **区分・閾値・日付境界を持つロジックは `it.each` によるテーブル駆動**で記述し、各区分の上端・下端とその直前直後を必ず含めてください。表がそのまま仕様書になるようにします。
+* **テスト駆動開発 (TDD):** 新規機能・修正時は必ず失敗するテスト（Red）を作成してから実装（Green）し、リファクタリング（Refactor）を行ってください。
+
+### 2.5 実行コマンド
+
+```bash
+pnpm test              # L1 + L2 + L3(Pipeline)
+pnpm test:coverage     # 上記 + カバレッジ計測
+pnpm test:worker       # L3(Worker): workerd + ローカル D1
+pnpm test:integration  # L3(Model): 実モデル (約1.1GB のダウンロードを伴う)
+pnpm test:e2e          # L4: wrangler dev + ローカル D1 + 本番ビルド
+pnpm test:e2e:smoke    # L4 のうち @smoke タグのみ
+pnpm typecheck         # tsc --noEmit
+pnpm check             # 型・リント・整形・Terraform・pinact・L1〜L3
+```
 
 ## 3. コマンド実行 & サンドボックス規約
 

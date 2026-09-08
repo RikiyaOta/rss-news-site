@@ -85,19 +85,40 @@ jobs:
             echo "Cloudflare API Token 未設定のため terraform plan をスキップします"
           fi
 
+      # 以前はここで `pnpm test:coverage | tee` としていたが、GitHub Actions の
+      # 既定シェル (bash -e) は pipefail が無効なため、テストが失敗しても
+      # パイプの終了ステータスが最後のコマンドのものになり CI が緑になりえた。
+      # 計測とレポート生成をステップごと分離し、パイプ自体を排除している。
       - name: テスト実行とカバレッジ計測
-        # GitHub Actions のデフォルトシェル (bash -e) は pipefail が無効なため、
-        # パイプの終了ステータスが最後のコマンド (tee) のものになり、
-        # pnpm test:coverage が失敗しても CI が成功扱いになってしまう。
-        # shell: bash を明示すると bash --noprofile --norc -eo pipefail が使われる。
-        shell: bash
-        run: |
-          pnpm test:coverage 2>&1 | tee coverage_raw.txt
-          sed -e 's/\x1b\[[0-9;]*m//g' coverage_raw.txt > coverage_clean.txt
-          echo "### 📊 テストカバレッジサマリー" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          sed -n '/% Coverage report from v8/,$p' coverage_clean.txt >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+        run: pnpm test:coverage
+
+      - name: 統合テスト (Worker / workerd + ローカル D1)
+        run: pnpm test:worker
+
+      - name: カバレッジレポートの生成
+        if: always()
+        run: pnpm coverage:report > coverage-report.md
+
+      - name: カバレッジサマリーの出力
+        if: always()
+        run: cat coverage-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # E2E は wrangler dev (ローカル workerd + ローカル D1 + 本番ビルド) に対して実行する。
+      # Cloudflare アカウントへは接続しないため、シークレット不要・無料枠の消費もない。
+      # PR では smoke タグのみを回し、全シナリオは nightly (e2e.yml) で実行する。
+      - name: Playwright ブラウザのインストール
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E スモークテスト
+        run: pnpm test:e2e:smoke
+
+      - name: Playwright レポートの保存
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-smoke
+          path: playwright-report/
+          retention-days: 7
 
       - name: PR Conversation に CI レポート (Terraform Plan & テストカバレッジ) をコメント投稿
         if: github.event_name == 'pull_request'
@@ -105,7 +126,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          COVERAGE_BODY=$(sed -n '/% Coverage report from v8/,$p' coverage_clean.txt)
+          COVERAGE_BODY=$(cat coverage-report.md)
           PLAN_SECTION=""
           if [ -f terraform/plan.txt ]; then
             PLAN_BODY=$(cat terraform/plan.txt)
@@ -118,10 +139,6 @@ jobs:
           "
           fi
 
-          REPORT_BODY="${PLAN_SECTION}### 📊 テストカバレッジレポート
-
-          \`\`\`
-          $COVERAGE_BODY
-          \`\`\`"
+          REPORT_BODY="${PLAN_SECTION}${COVERAGE_BODY}"
 
           gh pr comment "$PR_NUMBER" --body "$REPORT_BODY" --edit-last || gh pr comment "$PR_NUMBER" --body "$REPORT_BODY"

@@ -5,13 +5,14 @@ node_modules/
 # Build & Test outputs
 dist/
 coverage/
+coverage-report.md
 playwright-report/
 test-results/
 .playwright-cli/
 
-# Local databases & pipeline outputs
-data/*.db
-data/*.parquet
+# Wrangler (ローカル D1 の実体・dev サーバーの一時ファイル)
+.wrangler/
+
 
 # Environment variables
 .env

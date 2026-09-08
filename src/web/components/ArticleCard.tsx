@@ -65,10 +65,10 @@ export function ArticleCard({ article }: ArticleCardProps) {
               {article.source_name}
             </span>
 
-            {searchItem && searchItem.date && (
+            {searchItem && article.published_date_jst && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                 <Calendar className="w-3 h-3" />
-                {searchItem.date}
+                {article.published_date_jst}
               </span>
             )}
           </div>

@@ -1,18 +1,13 @@
-import fs from "node:fs";
-import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config";
 import { fetchFeedArticles, DatedArticle } from "./fetcher";
 import { scoreArticleWithProfile, precomputeInterestVectors } from "./scorer";
 import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
 import { syncArticlesToD1, ensureD1Schema, fetchExistingUrlsFromD1, D1SyncResult } from "./d1-sync";
-import { initLocalDatabase, upsertArticlesLocal } from "./db";
 
 export interface PipelineOptions {
   dateStr?: string;
   configPath?: string;
-  outputDir?: string;
-  localDbPath?: string;
   skipD1Sync?: boolean;
   extractorInstance?: any;
   parser?: any;
@@ -30,7 +25,6 @@ export interface PipelineResult {
   totalFetched: number;
   articles: ArticleInput[];
   d1SyncResult?: D1SyncResult;
-  localDbPath?: string;
 }
 
 /**
@@ -39,17 +33,11 @@ export interface PipelineResult {
 export async function runPipeline(options: PipelineOptions = {}): Promise<PipelineResult> {
   const dateStr = options.dateStr || new Date().toISOString().slice(0, 10);
   const configPath = options.configPath || "config/feeds.yaml";
-  const outputDir = options.outputDir || "./data";
   const skipD1Sync = options.skipD1Sync ?? false;
   const extractorInstance = options.extractorInstance;
   const parser = options.parser;
   const customFetch = options.customFetch;
   const maxAgeDays = options.maxAgeDays ?? 3;
-
-  const resolvedOutputDir = path.resolve(outputDir);
-  fs.mkdirSync(resolvedOutputDir, { recursive: true });
-
-  const localDbPath = options.localDbPath || path.join(resolvedOutputDir, "local_articles.db");
 
   // Step 1: 設定読み込み & RSS 巡回
   console.log(`\n========================================`);
@@ -184,19 +172,7 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     console.log(`[2/3] 🤖 新規記事がないため、AI スコアリングはスキップされました。`);
   }
 
-  // Step 3: ローカル SQLite DB への保存 & Cloudflare D1 への同期
-  if (processedArticles.length > 0) {
-    if (localDbPath) {
-      console.log(`\n[3/3] 💾 ローカル SQLite データベースを更新中... (${localDbPath})`);
-      const localDb = initLocalDatabase(localDbPath);
-      try {
-        upsertArticlesLocal(localDb, processedArticles);
-      } finally {
-        localDb.close();
-      }
-    }
-  }
-
+  // Step 3: Cloudflare D1 への同期
   let d1SyncResult: D1SyncResult | undefined;
 
   if (!skipD1Sync && accountId && databaseId && apiToken && processedArticles.length > 0) {
@@ -236,7 +212,6 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     totalFetched,
     articles: processedArticles,
     d1SyncResult,
-    localDbPath,
   };
 }
 

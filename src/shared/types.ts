@@ -3,9 +3,10 @@ export interface Article {
   title: string; // 記事タイトル
   url: string; // 記事URL
   source_name: string; // フィード名 (例: "Zenn", "Hacker News")
-  summary: string; // Geminiによる3行要約
+  summary: string; // 記事の抜粋 (og:description / description)
   score: number; // 0〜100 の興味関心スコア
   published_at: string; // ISO 8601 形式の公開日時
+  published_date_jst?: string; // JST の公開日 (YYYY-MM-DD)。API が返す
 }
 
 export interface FeedSource {
@@ -25,6 +26,5 @@ export interface PipelineConfig {
 }
 
 export interface SearchResultItem extends Article {
-  date: string;
-  similarity: number;
+  similarity: number; // クエリベクトルとのコサイン類似度 (0〜1)
 }

@@ -1,0 +1,32 @@
+{
+  // E2E 用の Wrangler 設定。
+  //
+  // 本番 (wrangler.jsonc) との違いは次の 3 点のみで、それ以外は同じ構成を使う:
+  //   1. main が E2E 用エントリポイント (Workers AI が無いときだけスタブを差し込む)
+  //   2. routes (カスタムドメイン) を持たない
+  //   3. d1_databases が E2E 専用のローカル DB を指す
+  //
+  // ai バインディングは意図的に定義していない。Workers AI はローカルで
+  // エミュレートできず、定義すると実アカウントへリクエストが飛んで
+  // 課金対象になるため。nightly で実 AI を使う場合のみ、
+  // 下記のコメントアウトを外して remote バインディングとして有効にする。
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rss-news-site-e2e",
+  "main": "tests/e2e/worker-entry.ts",
+  "compatibility_date": "2026-08-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "rss-news-e2e",
+      "database_id": "e2e-local-database",
+      "migrations_dir": "migrations"
+    }
+  ]
+  // nightly で実 Workers AI を使う場合に有効化する (AI のみリモート、D1 はローカルのまま):
+  // "ai": { "binding": "AI", "experimental_remote": true }
+}

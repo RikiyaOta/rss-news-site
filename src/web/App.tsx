@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { RefObject } from "react";
 import { SearchResultItem } from "../shared/types";
+import { getTodayJstDateString, adjustDateString } from "../shared/date";
 import { searchArticles } from "./lib/api-client";
 import { Header } from "./components/Header";
 import { SearchBar } from "./components/SearchBar";
@@ -15,33 +16,8 @@ export interface AppProps {
 
 const PAGE_SIZE = 30;
 
-/**
- * 日本標準時 (JST) の現在日付文字列 (YYYY-MM-DD) を取得する
- */
-export function getTodayJstString(): string {
-  const now = new Date();
-  const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const yyyy = jstDate.getUTCFullYear();
-  const mm = String(jstDate.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(jstDate.getUTCDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-/**
- * 日付文字列を指定日数分ずらす (YYYY-MM-DD)
- */
-export function adjustDate(dateStr: string, offsetDays: number): string {
-  const parts = dateStr.split("-").map(Number);
-  const d = new Date(parts[0], parts[1] - 1, parts[2]);
-  d.setDate(d.getDate() + offsetDays);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
-  const today = getTodayJstString();
+  const today = getTodayJstDateString();
   const [currentDate, setCurrentDate] = useState<string>(initialDate || today);
   const [mode, setMode] = useState<"daily" | "search">("daily");
 
@@ -55,8 +31,8 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
     apiBaseUrl,
   });
 
-  const prevDate = adjustDate(currentDate, -1);
-  const nextDate = adjustDate(currentDate, 1);
+  const prevDate = adjustDateString(currentDate, -1);
+  const nextDate = adjustDateString(currentDate, 1);
 
   // 当日より先の日付へは進めない
   const isNextDisabled = currentDate >= today && !initialDate;
@@ -174,7 +150,7 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
       {/* メインコンテンツ (CSS hidden による高速タブ切り替え) */}
       <main className="flex-1 min-h-0 w-full">
         {/* 日別記事一覧ビュー */}
-        <div className={mode === "daily" ? "h-full" : "hidden"}>
+        <div data-testid="daily-view" className={mode === "daily" ? "h-full" : "hidden"}>
           <DailyPager
             currentDate={currentDate}
             prevDate={prevDate}
@@ -187,7 +163,10 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
         </div>
 
         {/* セマンティック検索ビュー */}
-        <div className={mode === "search" ? "h-full overflow-y-auto overscroll-contain" : "hidden"}>
+        <div
+          data-testid="search-view"
+          className={mode === "search" ? "h-full overflow-y-auto overscroll-contain" : "hidden"}
+        >
           <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <SearchBar
               query={searchQuery}
