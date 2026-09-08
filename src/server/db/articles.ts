@@ -200,7 +200,57 @@ export async function countArticlesByPublishedDate(
 }
 
 /**
- * クエリベクトルとのコサイン類似度が高い上位記事を検索・ソートして取得する
+ * 事前計算したクエリベクトルのノルムを使ってコサイン類似度を求める。
+ *
+ * 検索では 1 本のクエリベクトルを全記事と突き合わせるため、
+ * クエリ側のノルムを記事ごとに計算し直すのは無駄になる。
+ * 1024 次元 × 記事数ぶんの乗算をまるごと省くために切り出している。
+ */
+function cosineSimilarityWithQueryNorm(
+  query: Float32Array,
+  target: Float32Array,
+  queryNorm: number,
+): number {
+  if (query.length !== target.length) {
+    throw new Error(`Vector dimensions do not match: ${query.length} vs ${target.length}`);
+  }
+  let dot = 0;
+  let targetNormSquares = 0;
+  for (let i = 0; i < query.length; i++) {
+    dot += query[i] * target[i];
+    targetNormSquares += target[i] * target[i];
+  }
+  const denom = queryNorm * Math.sqrt(targetNormSquares);
+  if (denom === 0) return 0;
+  return dot / denom;
+}
+
+/** ベクトルの L2 ノルム */
+function l2Norm(vector: Float32Array): number {
+  let sumSquares = 0;
+  for (let i = 0; i < vector.length; i++) {
+    sumSquares += vector[i] * vector[i];
+  }
+  return Math.sqrt(sumSquares);
+}
+
+/** 上位 K 件の並び順を決める比較。類似度降順、同値ならスコア降順 */
+function isBetterCandidate(
+  similarity: number,
+  score: number,
+  otherSimilarity: number,
+  otherScore: number,
+): boolean {
+  if (similarity !== otherSimilarity) return similarity > otherSimilarity;
+  return score > otherScore;
+}
+
+/**
+ * クエリベクトルとのコサイン類似度が高い上位記事を検索・ソートして取得する。
+ *
+ * 全記事のベクトルを走査する必要がある一方で、返すのは上位 limit 件だけなので、
+ * 走査中に保持するのは上位 limit 件のみとし、記事オブジェクトの生成も
+ * 最終的に返す分だけに絞っている（全件を配列に積んでから sort しない）。
  */
 export async function searchArticlesByVector(
   db: D1DatabaseLike | any,
@@ -210,8 +260,11 @@ export async function searchArticlesByVector(
   const limit = options?.limit ?? 30;
   const minSimilarity = options?.minSimilarity ?? 0;
 
+  if (limit <= 0) return [];
+
+  // created_at は API レスポンスでも画面でも使わないため取得しない
   const query = `
-    SELECT id, title, url, source_name, summary, score, published_at, published_date_jst, embedding, created_at
+    SELECT id, title, url, source_name, summary, score, published_at, published_date_jst, embedding
     FROM articles
     WHERE embedding IS NOT NULL
   `.trim();
@@ -222,35 +275,52 @@ export async function searchArticlesByVector(
     ArticleRecord & { embedding: Uint8Array | ArrayBuffer }
   >;
 
-  const scoredArticles: Array<ArticleRecord & { similarity: number }> = [];
+  const queryNorm = l2Norm(queryVector);
+
+  // 上位 limit 件だけを類似度降順で保持する（要素数は limit を超えない）
+  const top: Array<{ row: (typeof rows)[number]; similarity: number }> = [];
 
   for (const row of rows) {
     if (!row.embedding) continue;
-    const articleVector = deserializeVector(row.embedding);
-    const similarity = cosineSimilarity(queryVector, articleVector);
 
-    if (similarity >= minSimilarity) {
-      scoredArticles.push({
-        id: row.id,
-        title: row.title,
-        url: row.url,
-        source_name: row.source_name,
-        summary: row.summary,
-        score: row.score,
-        published_at: row.published_at,
-        published_date_jst: row.published_date_jst,
-        created_at: row.created_at,
-        similarity,
-      });
+    const similarity = cosineSimilarityWithQueryNorm(
+      queryVector,
+      deserializeVector(row.embedding),
+      queryNorm,
+    );
+    if (similarity < minSimilarity) continue;
+
+    // 既に limit 件あり、最下位にも及ばないなら捨てる
+    const worst = top.length === limit ? top[top.length - 1] : undefined;
+    if (worst && !isBetterCandidate(similarity, row.score, worst.similarity, worst.row.score)) {
+      continue;
     }
+
+    let insertAt = top.length;
+    while (
+      insertAt > 0 &&
+      isBetterCandidate(
+        similarity,
+        row.score,
+        top[insertAt - 1].similarity,
+        top[insertAt - 1].row.score,
+      )
+    ) {
+      insertAt--;
+    }
+    top.splice(insertAt, 0, { row, similarity });
+    if (top.length > limit) top.pop();
   }
 
-  scoredArticles.sort((a, b) => {
-    if (b.similarity !== a.similarity) {
-      return b.similarity - a.similarity;
-    }
-    return b.score - a.score;
-  });
-
-  return scoredArticles.slice(0, limit);
+  return top.map(({ row, similarity }) => ({
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    source_name: row.source_name,
+    summary: row.summary,
+    score: row.score,
+    published_at: row.published_at,
+    published_date_jst: row.published_date_jst,
+    similarity,
+  }));
 }
