@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { syncArticlesToD1, D1SyncOptions } from "../../../src/pipeline/d1-sync";
+import {
+  syncArticlesToD1,
+  fetchExistingUrlsFromD1,
+  D1SyncOptions,
+} from "../../../src/pipeline/d1-sync";
 import { ArticleInput } from "../../../src/server/db/articles";
 
 describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテスト", () => {
@@ -358,23 +362,26 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
   });
 
   describe("fetchExistingUrlsFromD1", () => {
-    it("D1 REST API から登録済みの URL 一覧を Set として取得できること", async () => {
-      const { fetchExistingUrlsFromD1 } = await import("../../../src/pipeline/d1-sync");
-      const mockFetch = vi.fn().mockResolvedValue({
+    /** D1 REST API /query の実際のレスポンス形式（行はオブジェクトの配列） */
+    function queryResponse(urls: string[]) {
+      return {
         ok: true,
         status: 200,
         json: async () => ({
-          result: [
-            {
-              results: [
-                { url: "https://example.com/articles/1" },
-                { url: "https://example.com/articles/2" },
-              ],
-            },
-          ],
+          result: [{ results: urls.map((url) => ({ url })), success: true, meta: {} }],
           success: true,
+          errors: [],
+          messages: [],
         }),
-      });
+      };
+    }
+
+    it("登録済みの URL 一覧を Set として取得できること", async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValue(
+          queryResponse(["https://example.com/articles/1", "https://example.com/articles/2"]),
+        );
 
       const urlSet = await fetchExistingUrlsFromD1({
         accountId: "acc-123",
@@ -389,32 +396,104 @@ describe("Cloudflare D1 同期モジュール (src/pipeline/d1-sync) のテス�
       expect(urlSet.has("https://example.com/articles/2")).toBe(true);
       expect(urlSet.has("https://example.com/articles/unknown")).toBe(false);
 
-      const [url, init] = mockFetch.mock.calls[0];
-      expect(url).toBe(
-        "https://api.cloudflare.com/client/v4/accounts/acc-123/d1/database/db-456/raw",
-      );
-      const body = JSON.parse(init.body);
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.sql).toContain("SELECT url FROM articles WHERE published_date_jst >= ?");
       expect(body.params).toEqual(["2026-08-17"]);
     });
 
-    it("設定が不足している場合や API エラー発生時に安全に空の Set を返すこと", async () => {
-      const { fetchExistingUrlsFromD1 } = await import("../../../src/pipeline/d1-sync");
+    /**
+     * 以前は書き込みと同じ /raw を叩きながら /query の形でパースしていたため、
+     * URL が 1 件も集まらず重複排除が常に無効化されていた。
+     * エンドポイントの取り違えを二度と起こさないよう、URL 自体を検証する。
+     */
+    it("行をオブジェクトで返す /query エンドポイントを使うこと (/raw ではない)", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(queryResponse([]));
+
+      await fetchExistingUrlsFromD1({
+        accountId: "acc-123",
+        databaseId: "db-456",
+        apiToken: "token-789",
+        customFetch: mockFetch as any,
+      });
+
+      expect(mockFetch.mock.calls[0][0]).toBe(
+        "https://api.cloudflare.com/client/v4/accounts/acc-123/d1/database/db-456/query",
+      );
+    });
+
+    it("sinceDateJst 未指定の場合は全期間を対象とすること", async () => {
+      const mockFetch = vi.fn().mockResolvedValue(queryResponse([]));
+
+      await fetchExistingUrlsFromD1({
+        accountId: "acc-123",
+        databaseId: "db-456",
+        apiToken: "token-789",
+        customFetch: mockFetch as any,
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.sql).toBe("SELECT url FROM articles;");
+      expect(body.params).toEqual([]);
+    });
+
+    it("認証情報が欠けている場合はリクエストを送らず空の Set を返すこと", async () => {
+      const mockFetch = vi.fn();
+
       const emptySet = await fetchExistingUrlsFromD1({
         accountId: "",
         databaseId: "",
         apiToken: "",
+        customFetch: mockFetch as any,
       });
-      expect(emptySet.size).toBe(0);
 
-      const mockErrorFetch = vi.fn().mockResolvedValue({ ok: false, status: 500 });
-      const errorSet = await fetchExistingUrlsFromD1({
-        accountId: "acc-123",
-        databaseId: "db-456",
-        apiToken: "token-789",
-        customFetch: mockErrorFetch as any,
-      });
-      expect(errorSet.size).toBe(0);
+      expect(emptySet.size).toBe(0);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    /**
+     * 照会の失敗は「毎回すべて再スコアリング・再同期する」状態に直結するため、
+     * 空の Set を返して黙って続けるのではなく例外にする。
+     * 呼び出し側 (src/pipeline/index.ts) が警告を出したうえで全件処理へフォールバックする。
+     */
+    it.each([
+      {
+        note: "HTTP エラー",
+        response: { ok: false, status: 500, text: async () => "Internal Server Error" },
+      },
+      {
+        note: "success: false",
+        response: {
+          ok: true,
+          status: 200,
+          json: async () => ({ success: false, errors: [{ message: "認証エラー" }] }),
+        },
+      },
+      {
+        note: "results が配列でない (/raw の形式で返ってきた場合)",
+        response: {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            result: [{ results: { columns: ["url"], rows: [["https://example.com/1"]] } }],
+            success: true,
+          }),
+        },
+      },
+      {
+        note: "result 自体が無い",
+        response: { ok: true, status: 200, json: async () => ({ success: true }) },
+      },
+    ])("$note の場合は握りつぶさず例外を投げること", async ({ response }) => {
+      const mockFetch = vi.fn().mockResolvedValue(response);
+
+      await expect(
+        fetchExistingUrlsFromD1({
+          accountId: "acc-123",
+          databaseId: "db-456",
+          apiToken: "token-789",
+          customFetch: mockFetch as any,
+        }),
+      ).rejects.toThrow(/D1 既存 URL 照会/);
     });
   });
 });

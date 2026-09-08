@@ -49,7 +49,13 @@ export function uint8ArrayToHex(uint8: Uint8Array): string {
 }
 
 /**
- * Cloudflare D1 に既に登録されている記事の URL 一覧を取得する（重複スコアリング計算のスキップ用）
+ * Cloudflare D1 に既に登録されている記事の URL 一覧を取得する（重複スコアリング計算のスキップ用）。
+ *
+ * NOTE: 必ず /query エンドポイントを使うこと。
+ * 書き込みで使っている /raw は行を「値の配列」で返し、カラム名は別フィールドになるため、
+ * `row.url` ではアクセスできない。以前は /raw を叩きながら /query の形（オブジェクトの配列）で
+ * パースしていたため、URL が 1 件も集まらず重複排除が常に無効化されていた。
+ * さらに例外を握りつぶしていたので、失敗が表に出ないまま同じ記事を再スコアリング・再同期し続けていた。
  */
 export async function fetchExistingUrlsFromD1(
   options: Pick<D1SyncOptions, "accountId" | "databaseId" | "apiToken" | "customFetch"> & {
@@ -60,36 +66,46 @@ export async function fetchExistingUrlsFromD1(
   if (!accountId || !databaseId || !apiToken) return new Set();
 
   const fetchFn = options.customFetch ?? fetch;
-  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/raw`;
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
 
   const sql = sinceDateJst
     ? "SELECT url FROM articles WHERE published_date_jst >= ?;"
     : "SELECT url FROM articles;";
   const params = sinceDateJst ? [sinceDateJst] : [];
 
-  try {
-    const response = await fetchFn(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ sql, params }),
-    });
+  const response = await fetchFn(endpoint, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ sql, params }),
+  });
 
-    if (!response.ok) return new Set();
-    const resData = (await response.json()) as any;
-    const results = resData?.result?.[0]?.results ?? [];
-    const urlSet = new Set<string>();
-    for (const row of results) {
-      if (typeof row?.url === "string" && row.url) {
-        urlSet.add(row.url);
-      }
-    }
-    return urlSet;
-  } catch {
-    return new Set();
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(`D1 既存 URL 照会失敗: ${response.status} ${errorText}`);
   }
+
+  const resData = (await response.json()) as any;
+  if (resData?.success === false) {
+    throw new Error(`D1 既存 URL 照会失敗: ${JSON.stringify(resData?.errors ?? [])}`);
+  }
+
+  const rows = resData?.result?.[0]?.results;
+  if (!Array.isArray(rows)) {
+    throw new Error(
+      `D1 既存 URL 照会のレスポンス形式が想定と異なります: ${JSON.stringify(resData)?.slice(0, 200)}`,
+    );
+  }
+
+  const urlSet = new Set<string>();
+  for (const row of rows) {
+    if (typeof row?.url === "string" && row.url) {
+      urlSet.add(row.url);
+    }
+  }
+  return urlSet;
 }
 
 /**

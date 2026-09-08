@@ -93,11 +93,14 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
         sinceDateJst: sinceDate,
         customFetch,
       });
-      if (existingD1Urls.size > 0) {
-        console.log(`  🔍 D1 内に既存の登録済み記事を ${existingD1Urls.size} 件検出しました。`);
-      }
-    } catch {
-      // 照合エラー時は全件スコアリングにフォールバック
+      console.log(`  🔍 D1 内に既存の登録済み記事を ${existingD1Urls.size} 件検出しました。`);
+    } catch (err: any) {
+      // 照合できなくても全件スコアリングで処理は続行できる。
+      // ただし黙って続けると「毎回すべて再スコアリング・再同期する」状態に
+      // 気づけないため（実際に長期間そうなっていた）、必ず警告を出す。
+      console.warn(
+        `  ⚠️ D1 の既存 URL 照合に失敗しました。全件を再スコアリングします: ${err?.message || err}`,
+      );
     }
   }
 

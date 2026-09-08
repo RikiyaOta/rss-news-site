@@ -245,6 +245,103 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       expect(result.processedCount).toBe(0);
     });
 
+    /**
+     * 上のテストは fetchExistingUrlsFromD1 ごとモックしているため、
+     * REST API のレスポンスをパースする部分を一度も通らない。
+     * 実際には /raw を叩きながら /query の形でパースしていて URL が 1 件も集まらず、
+     * 重複排除が長期間まるごと無効化されていた（毎回すべて再スコアリング・再同期していた）。
+     * ここでは本物の fetchExistingUrlsFromD1 を、実際のレスポンス形式を返す fetch に対して通す。
+     */
+    it("実際の D1 レスポンス形式に対して重複排除が機能すること", async () => {
+      vi.spyOn(fetcherModule, "fetchFeedArticles").mockImplementation(async (source) =>
+        source.name === "Tech Feed 1" ? [sampleRawArticles[0], sampleRawArticles[1]] : [],
+      );
+      const scoreSpy = vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
+        score: 80,
+        maxSimilarity: 0.8,
+        articleVector: new Float32Array(1024).fill(0.1),
+      });
+      vi.spyOn(scorerModule, "precomputeInterestVectors").mockResolvedValue(new Map());
+
+      // 1 件目だけ D1 に登録済みという応答を返す
+      const customFetch = vi.fn(async (url: any) => {
+        if (String(url).endsWith("/query")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              result: [{ results: [{ url: sampleRawArticles[0].url }], success: true, meta: {} }],
+              success: true,
+            }),
+          } as any;
+        }
+        // ensureD1Schema と syncArticlesToD1 (/raw)
+        return {
+          ok: true,
+          status: 200,
+          text: async () => "",
+          json: async () => ({ result: [], success: true }),
+        } as any;
+      });
+
+      const result = await runPipeline({
+        dateStr: "2026-08-19",
+        configPath: configFilePath,
+        skipD1Sync: false,
+        customFetch: customFetch as any,
+      });
+
+      // 登録済みの 1 件はスコアリングも同期もされない
+      expect(result.totalFetched).toBe(2);
+      expect(result.skippedCount).toBe(1);
+      expect(result.processedCount).toBe(1);
+      expect(scoreSpy).toHaveBeenCalledTimes(1);
+      expect(result.articles[0].url).toBe(sampleRawArticles[1].url);
+
+      // 照会は /query エンドポイントに対して行われる
+      const queryCall = customFetch.mock.calls.find((call) => String(call[0]).endsWith("/query"));
+      expect(queryCall).toBeDefined();
+    });
+
+    it("既存 URL の照合に失敗した場合は警告を出したうえで全件処理へフォールバックすること", async () => {
+      vi.spyOn(fetcherModule, "fetchFeedArticles").mockImplementation(async (source) =>
+        source.name === "Tech Feed 1" ? [sampleRawArticles[0]] : [],
+      );
+      vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
+        score: 80,
+        maxSimilarity: 0.8,
+        articleVector: new Float32Array(1024).fill(0.1),
+      });
+      vi.spyOn(scorerModule, "precomputeInterestVectors").mockResolvedValue(new Map());
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const customFetch = vi.fn(async (url: any) => {
+        if (String(url).endsWith("/query")) {
+          return { ok: false, status: 500, text: async () => "Internal Server Error" } as any;
+        }
+        return {
+          ok: true,
+          status: 200,
+          text: async () => "",
+          json: async () => ({ result: [], success: true }),
+        } as any;
+      });
+
+      const result = await runPipeline({
+        dateStr: "2026-08-19",
+        configPath: configFilePath,
+        skipD1Sync: false,
+        customFetch: customFetch as any,
+      });
+
+      // 処理は続行される
+      expect(result.processedCount).toBe(1);
+      // ただし黙って続けない
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("D1 の既存 URL 照合に失敗しました"),
+      );
+    });
+
     it("D1 の既存 URL 照合期間が JST 基準の日付かつ maxAgeDays に1日の余裕を持たせた範囲であること", async () => {
       // JST では 2026-08-28、UTC では 2026-08-27 となる時刻に固定する
       vi.setSystemTime(new Date("2026-08-27T16:00:00.000Z"));
