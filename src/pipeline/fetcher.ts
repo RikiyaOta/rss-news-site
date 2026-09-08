@@ -36,6 +36,19 @@ const defaultParser = new Parser({
     Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
   },
   timeout: 10000,
+  // agent: false は「接続を使い回さない (Connection: close)」の指定。
+  //
+  // rss-parser 3.13.0 の parseURL はリダイレクト応答を受け取ると、その
+  // レスポンス本文を読み捨てず、リクエストも中断しないままリダイレクト先の
+  // 取得へ進む。Node 19 以降の http.globalAgent は keepAlive が既定で有効な
+  // ため、読み捨てられなかった接続はサーバー側がアイドルタイムアウトで
+  // 閉じるまで解放されない。その間ソケットはイベントループを掴み続けるので、
+  // パイプラインは全処理を終えたあともプロセスが終了できなくなる
+  // (実際に GitHub Actions で完了ログの出力後 6 分 45 秒ハングしていた)。
+  //
+  // 各フィードは別ホストへの 1 リクエストずつで接続の使い回しに利点が無いため、
+  // keepAlive を使わずサーバーに即座に接続を閉じさせる。
+  requestOptions: { agent: false },
 });
 
 export function generateArticleId(url: string): string {
@@ -150,10 +163,10 @@ export async function fetchPageDescription(
   url: string,
   customFetch: typeof fetch = fetch,
 ): Promise<string> {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
 
+  try {
     const response = await customFetch(url, {
       signal: controller.signal,
       headers: {
@@ -162,13 +175,19 @@ export async function fetchPageDescription(
         Accept: "text/html,application/xhtml+xml",
       },
     });
-    clearTimeout(timeoutId);
 
-    if (!response.ok) return "";
+    if (!response.ok) {
+      // 本文を読み捨てないと接続が解放されず、プロセスの終了を妨げる
+      await response.body?.cancel().catch(() => {});
+      return "";
+    }
     const html = await response.text();
     return extractMetaDescription(html);
   } catch {
     return "";
+  } finally {
+    // 失敗した場合もタイマーを残さない (最大 5 秒プロセスの終了が遅れるため)
+    clearTimeout(timeoutId);
   }
 }
 
