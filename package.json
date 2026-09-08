@@ -19,13 +19,17 @@
     "fmt:check": "oxfmt --check src tests",
     "lint:tf": "terraform fmt -check -recursive terraform",
     "fmt:tf": "terraform fmt -recursive terraform",
-    "check": "pnpm typecheck && pnpm lint && pnpm fmt:check && pnpm lint:tf && pnpm pinact:check && pnpm test",
+    "check": "pnpm typecheck && pnpm lint && pnpm fmt:check && pnpm lint:tf && pnpm pinact:check && pnpm test && pnpm test:worker",
     "pinact": "pinact run .github/workflows/*.yml",
-    "pinact:check": "pinact run --check --verify .github/workflows/*.yml"
+    "pinact:check": "pinact run --check --verify .github/workflows/*.yml",
+    "test:worker": "vitest run --config vitest.worker.config.ts",
+    "test:e2e:smoke": "playwright test --grep @smoke",
+    "coverage:report": "node scripts/coverage-summary.mjs",
+    "e2e:seed": "tsx tests/e2e/seed.ts",
+    "e2e:server": "pnpm build && pnpm e2e:seed && wrangler dev --config wrangler.e2e.jsonc --port 8787 --ip 127.0.0.1"
   },
   "dependencies": {
     "@huggingface/transformers": "3.8.1",
-    "better-sqlite3": "^13.0.3",
     "clsx": "^2.1.1",
     "hono": "^4.13.5",
     "js-yaml": "^5.4.1",
@@ -36,11 +40,11 @@
     "tailwind-merge": "^3.0.2"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20260830.1",
     "@playwright/test": "^1.50.1",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/react": "^16.3.3",
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.2.5",

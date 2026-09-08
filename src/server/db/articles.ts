@@ -1,6 +1,9 @@
 /**
  * Cloudflare D1 (SQLite) データベース操作・記事クエリレイヤー
  */
+import { computePublishedDateJst } from "../../shared/date";
+
+export { computePublishedDateJst };
 
 export interface ArticleInput {
   id: string;
@@ -44,21 +47,6 @@ export interface D1DatabaseLike {
   batch?(statements: D1PreparedStatementLike[]): Promise<unknown[]>;
   exec?(query: string): Promise<unknown>;
   [key: string]: unknown;
-}
-
-/**
- * UTC ISO8601 日時から日本時間 (JST: UTC+9) の日付文字列 (YYYY-MM-DD) を算出する
- */
-export function computePublishedDateJst(publishedAtIso: string): string {
-  const date = new Date(publishedAtIso);
-  if (isNaN(date.getTime())) {
-    throw new Error(`Invalid date string: ${publishedAtIso}`);
-  }
-  const jstDate = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  const yyyy = jstDate.getUTCFullYear();
-  const mm = String(jstDate.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(jstDate.getUTCDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
 }
 
 /**

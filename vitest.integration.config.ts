@@ -13,7 +13,7 @@ export default defineConfig({
     globals: true,
     environment: "node",
     fileParallelism: false,
-    include: ["tests/integration/**/*.test.ts"],
+    include: ["tests/integration/model/**/*.test.ts"],
     testTimeout: 900000,
     hookTimeout: 900000
   },

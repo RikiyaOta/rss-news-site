@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { getTodayJstDateString } from "../shared/date";
 import {
   getArticlesByPublishedDate,
   countArticlesByPublishedDate,
@@ -13,18 +14,6 @@ export interface Bindings {
   DB: D1DatabaseLike | any;
   AI: any;
   ASSETS?: any;
-}
-
-/**
- * 現在の日本時間 (JST: UTC+9) の日付文字列 (YYYY-MM-DD) を取得する
- */
-export function getCurrentJstDate(): string {
-  const now = new Date();
-  const jstDate = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const yyyy = jstDate.getUTCFullYear();
-  const mm = String(jstDate.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(jstDate.getUTCDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
 }
 
 /**
@@ -71,7 +60,7 @@ app.get("/health", (c) => {
 // GET /api/articles
 app.get("/api/articles", async (c) => {
   const dateParam = c.req.query("date");
-  const date = dateParam && dateParam.trim() ? dateParam.trim() : getCurrentJstDate();
+  const date = dateParam && dateParam.trim() ? dateParam.trim() : getTodayJstDateString();
 
   const limitParam = c.req.query("limit");
   const offsetParam = c.req.query("offset");

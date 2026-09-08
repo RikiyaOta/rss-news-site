@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { ArticleInput, computePublishedDateJst } from "../server/db/articles";
 
 export interface D1SyncOptions {
@@ -15,23 +18,27 @@ export interface D1SyncResult {
   errors?: any[];
 }
 
-export const SCHEMA_STATEMENTS = `
-CREATE TABLE IF NOT EXISTS articles (
-  id TEXT PRIMARY KEY,
-  title TEXT NOT NULL,
-  url TEXT NOT NULL UNIQUE,
-  source_name TEXT NOT NULL,
-  summary TEXT,
-  score REAL NOT NULL,
-  published_at TEXT NOT NULL,
-  published_date_jst TEXT NOT NULL,
-  embedding BLOB,
-  created_at TEXT DEFAULT (datetime('now'))
+/** migrations/ ディレクトリ (本番 D1 へ wrangler が適用するものと同一) */
+const MIGRATIONS_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../migrations",
 );
-CREATE INDEX IF NOT EXISTS idx_articles_jst_score ON articles(published_date_jst, score DESC);
-CREATE INDEX IF NOT EXISTS idx_articles_url ON articles(url);
-CREATE INDEX IF NOT EXISTS idx_articles_score ON articles(score DESC);
-`.trim();
+
+/**
+ * migrations/ 配下の SQL をファイル名順に連結して返す。
+ *
+ * スキーマ定義を複数箇所に持つとテストと本番で食い違うため、
+ * wrangler が適用する migrations/ を唯一の正とし、ここから読み出す。
+ */
+export function readMigrationStatements(migrationsDir: string = MIGRATIONS_DIR): string {
+  return fs
+    .readdirSync(migrationsDir)
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .map((file) => fs.readFileSync(path.join(migrationsDir, file), "utf-8"))
+    .join("\n")
+    .trim();
+}
 
 export function uint8ArrayToHex(uint8: Uint8Array): string {
   let hex = "";
@@ -101,7 +108,7 @@ export async function ensureD1Schema(
       Authorization: `Bearer ${apiToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ sql: SCHEMA_STATEMENTS }),
+    body: JSON.stringify({ sql: readMigrationStatements() }),
   });
 
   if (!response.ok) {

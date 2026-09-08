@@ -30,11 +30,16 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Playwright ブラウザのインストール
-        run: pnpm exec playwright install --with-deps
+        run: pnpm exec playwright install --with-deps chromium
 
+      # 全シナリオを desktop / mobile の両プロファイルで実行する。
+      # wrangler dev はローカルモードで動くため Cloudflare へは接続せず、
+      # 無料枠も消費しない。
+      #
+      # 実 Workers AI まで通したい場合は wrangler.e2e.jsonc の ai バインディング
+      # (experimental_remote) を有効にし、CLOUDFLARE_API_TOKEN / ACCOUNT_ID を渡す。
+      # AI のみリモートで D1 はローカルのままなので、本番データには触れない。
       - name: E2E テスト実行
-        env:
-          E2E_REAL_MODEL: "true"
         run: pnpm test:e2e
 
       - name: Playwright レポートの保存
