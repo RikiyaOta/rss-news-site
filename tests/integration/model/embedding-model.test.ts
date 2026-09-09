@@ -30,7 +30,6 @@ const EMBEDDING_DIMENSIONS = 1024;
 const profile: UserProfile = {
   interests: ["TypeScript の型システム", "Cloudflare Workers とエッジコンピューティング"],
   exclude_keywords: ["広告"],
-  scoring_guidelines: "技術的深さと実用性を重視",
 };
 
 const relevantArticle = {

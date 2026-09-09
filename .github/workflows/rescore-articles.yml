@@ -1,0 +1,77 @@
+name: Rescore Existing Articles
+
+# D1 に登録済みの全記事を再スコアリング・再ベクトル化するバックフィル。
+#
+# 通常のパイプラインは登録済み URL をスキップするため、スコア区分や埋め込みの
+# 仕様（プーリング・プレフィックス）を変えても過去記事には反映されない。
+# 検索用ベクトルの空間を新旧で揃える意味でも、埋め込みの作り方を変えたあとは
+# 一度これを流す必要がある。
+#
+# 本番 D1 を書き換えるため定期実行はせず、手動実行のみとする。
+# 既定は dry-run なので、まず変化を確認してから apply で実行すること。
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '実行モード (dry-run: D1 を更新せず変化のみ表示 / apply: 実際に更新)'
+        required: true
+        type: choice
+        default: 'dry-run'
+        options:
+          - 'dry-run'
+          - 'apply'
+      limit:
+        description: '処理する件数の上限 (空なら全件)'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  rescore:
+    runs-on: ubuntu-latest
+    # 全件のベクトル再生成を伴うため、通常のパイプラインより長めに取る。
+    # ハングを静かに引きずらないよう上限は必ず設ける。
+    timeout-minutes: 120
+    steps:
+      - name: リポジトリのチェックアウト
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: mise ツールのセットアップ
+        uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+
+      - name: pnpm store パスの取得
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: pnpm store のキャッシュ
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: 依存パッケージのインストール
+        run: pnpm install --frozen-lockfile
+
+      - name: 実行オプションの組み立て
+        id: options
+        env:
+          MODE: ${{ inputs.mode }}
+          LIMIT: ${{ inputs.limit }}
+        run: |
+          ARGS=""
+          if [ "$MODE" != "apply" ]; then
+            ARGS="--dry-run"
+          fi
+          if [ -n "$LIMIT" ]; then
+            ARGS="$ARGS --limit $LIMIT"
+          fi
+          echo "args=$ARGS" >> "$GITHUB_OUTPUT"
+          echo "再スコアリングを次のオプションで実行します: $ARGS"
+
+      - name: 既存記事の再スコアリング
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_D1_DATABASE_ID: ${{ secrets.CLOUDFLARE_D1_DATABASE_ID }}
+        run: pnpm rescore ${{ steps.options.outputs.args }}

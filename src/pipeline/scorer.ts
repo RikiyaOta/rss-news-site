@@ -1,5 +1,5 @@
 import { UserProfile } from "../shared/types";
-import { embedText, generateArticleEmbedding } from "./embedder";
+import { embedText, formatArticleText, generateArticleEmbedding } from "./embedder";
 
 /**
  * 類似度からスコアへ変換する区分の境界。
@@ -105,7 +105,7 @@ export async function scoreArticleWithProfile(
   extractorParam?: any,
 ): Promise<ArticleScore> {
   // 1. 記事ベクトルの生成
-  const articleVector = await generateArticleEmbedding(title, snippet || "", extractorParam);
+  const articleVector = await generateArticleEmbedding(title, snippet, extractorParam);
 
   // 2. 関心ベクトルの準備
   const interestVectors =
@@ -123,10 +123,14 @@ export async function scoreArticleWithProfile(
   }
 
   // 4. 除外キーワードの検出
-  const fullText = `${title} ${snippet}`.toLowerCase();
+  //
+  // 照合対象は埋め込みに使うテキストと同じもの（タイトル＋要約の先頭 1000 文字）に
+  // 揃える。本文全体を配信するフィードでは snippet が記事まるごとになるため、
+  // 制限しないと本文のどこかに 1 度出ただけの語で記事が 10 点以下に潰れてしまう。
+  const matchTarget = formatArticleText(title, snippet).toLowerCase();
   const excludedBy =
     profile.exclude_keywords.find(
-      (kw) => kw.trim() && fullText.includes(kw.trim().toLowerCase()),
+      (kw) => kw.trim() && matchTarget.includes(kw.trim().toLowerCase()),
     ) ?? null;
 
   // 5. スコア計算

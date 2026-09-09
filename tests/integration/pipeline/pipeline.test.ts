@@ -21,7 +21,6 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
     profile: {
       interests: ["TypeScript", "Cloudflare D1", "BGE-M3"],
       exclude_keywords: ["広告", "PR"],
-      scoring_guidelines: "技術的深さと実用性を重視",
     },
   };
 

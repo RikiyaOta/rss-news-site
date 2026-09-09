@@ -6,13 +6,16 @@ import {
   scoreArticleWithProfile,
 } from "../../../src/pipeline/scorer";
 import { UserProfile } from "../../../src/shared/types";
-import { resetExtractor, setExtractor } from "../../../src/pipeline/embedder";
+import {
+  MAX_EMBEDDING_TEXT_CHARS,
+  resetExtractor,
+  setExtractor,
+} from "../../../src/pipeline/embedder";
 
 describe("ローカル多言語埋め込みスコアリングモジュール (src/pipeline/scorer)", () => {
   const mockProfile: UserProfile = {
     interests: ["TypeScript", "React", "Cloudflare", "AI Agents"],
     exclude_keywords: ["PR記事", "スポンサード", "セール"],
-    scoring_guidelines: "",
   };
 
   beforeEach(() => {
@@ -279,6 +282,46 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       );
 
       expect(result.excludedBy).toBeNull();
+    });
+
+    /**
+     * 本文全体を配信するフィードでは snippet が記事まるごとになる。
+     * 照合対象を埋め込み入力と同じ範囲に制限しないと、本文の遠くに 1 度
+     * 出ただけの語で記事が 10 点以下に潰れてしまう。
+     */
+    it("埋め込み入力の上限を超えた位置にある除外キーワードは無視すること", async () => {
+      const mockExtractor = vi.fn().mockImplementation(async () => ({
+        data: new Float32Array(1024).fill(0.5),
+      }));
+
+      const longBody = `${"あ".repeat(MAX_EMBEDDING_TEXT_CHARS)}スポンサード`;
+
+      const result = await scoreArticleWithProfile(
+        "Rust の所有権システム詳解",
+        longBody,
+        mockProfile,
+        undefined,
+        mockExtractor,
+      );
+
+      expect(result.excludedBy).toBeNull();
+      expect(result.score).toBeGreaterThan(10);
+    });
+
+    it("埋め込み入力の範囲内にある除外キーワードは検出すること", async () => {
+      const mockExtractor = vi.fn().mockImplementation(async () => ({
+        data: new Float32Array(1024).fill(0.5),
+      }));
+
+      const result = await scoreArticleWithProfile(
+        "Rust の所有権システム詳解",
+        `スポンサード記事です。${"あ".repeat(100)}`,
+        mockProfile,
+        undefined,
+        mockExtractor,
+      );
+
+      expect(result.excludedBy).toBe("スポンサード");
     });
 
     it("最も類似度が高かった関心キーワードを matchedInterest として返すこと", async () => {

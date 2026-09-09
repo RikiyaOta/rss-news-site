@@ -17,7 +17,6 @@ export interface FeedSource {
 export interface UserProfile {
   interests: string[];
   exclude_keywords: string[];
-  scoring_guidelines: string;
 }
 
 export interface PipelineConfig {
