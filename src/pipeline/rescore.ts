@@ -36,6 +36,79 @@ export interface RescoreResult {
   errors?: any[];
 }
 
+/** 分布サマリーの入力となる 1 記事分の計測値 */
+export interface RescoreSample {
+  oldScore: number;
+  newScore: number;
+  similarity: number;
+  excluded: boolean;
+}
+
+/** スコア分布のバケット境界（下端は含む、上端は含まない。最上位のみ 100 を含む） */
+const SCORE_BUCKETS = [0, 20, 40, 60, 80, 100] as const;
+
+export function percentile(sortedValues: number[], p: number): number {
+  if (sortedValues.length === 0) return NaN;
+  const index = Math.min(
+    sortedValues.length - 1,
+    Math.max(0, Math.round((sortedValues.length - 1) * p)),
+  );
+  return sortedValues[index];
+}
+
+/**
+ * 再スコアリング結果の分布を組み立てる。
+ *
+ * 1 記事ずつのログだけでは、区分が実データと噛み合っているかを
+ * 判断できない（実際に噛み合っていない状態を数千行のログから
+ * 目視で見つける羽目になった）。類似度の分位点と新旧のスコア分布を
+ * 必ず最後に出す。
+ */
+export function buildDistributionSummary(samples: RescoreSample[]): string[] {
+  if (samples.length === 0) return [];
+
+  const lines: string[] = [];
+  const similarities = samples.map((s) => s.similarity).sort((a, b) => a - b);
+
+  lines.push(`\n===== 最大コサイン類似度の分布 (n=${samples.length}) =====`);
+  for (const p of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 1]) {
+    const label = `p${(p * 100).toFixed(0)}`.padStart(4, " ");
+    lines.push(`  ${label}: ${percentile(similarities, p).toFixed(4)}`);
+  }
+
+  lines.push(`\n===== スコア分布 (旧 → 新) =====`);
+  for (let i = 0; i < SCORE_BUCKETS.length - 1; i++) {
+    const lower = SCORE_BUCKETS[i];
+    const upper = SCORE_BUCKETS[i + 1];
+    const isTop = i === SCORE_BUCKETS.length - 2;
+    const inBucket = (score: number) => score >= lower && (isTop ? score <= upper : score < upper);
+
+    const oldCount = samples.filter((s) => inBucket(s.oldScore)).length;
+    const newCount = samples.filter((s) => inBucket(s.newScore)).length;
+    const percent = ((newCount / samples.length) * 100).toFixed(1);
+
+    lines.push(
+      `  ${String(lower).padStart(3, " ")}〜${String(upper).padStart(3, " ")}点: ` +
+        `${String(oldCount).padStart(5, " ")} 件 → ${String(newCount).padStart(5, " ")} 件 ` +
+        `(${percent.padStart(5, " ")}%)`,
+    );
+  }
+
+  const excludedCount = samples.filter((s) => s.excluded).length;
+  const maxScore = Math.max(...samples.map((s) => s.newScore));
+  lines.push(`\n  除外キーワードで減点された記事: ${excludedCount} 件`);
+  lines.push(`  新スコアの最高点: ${maxScore} 点`);
+
+  // 上位の区分に 1 件も届かないなら、区分が実分布より高すぎるということ。
+  if (maxScore < 60) {
+    lines.push(
+      `  ⚠️ 最高点が 60 点未満です。SIMILARITY_BANDS が実際の類似度分布より高すぎる可能性があります。`,
+    );
+  }
+
+  return lines;
+}
+
 export async function runRescore(options: RescoreOptions = {}): Promise<RescoreResult> {
   const configPath = options.configPath || "config/feeds.yaml";
   const dryRun = options.dryRun ?? false;
@@ -83,6 +156,7 @@ export async function runRescore(options: RescoreOptions = {}): Promise<RescoreR
   );
 
   const targets: RescoreTarget[] = [];
+  const samples: RescoreSample[] = [];
   let changed = 0;
 
   for (let i = 0; i < articles.length; i++) {
@@ -117,6 +191,16 @@ export async function runRescore(options: RescoreOptions = {}): Promise<RescoreR
     );
 
     targets.push({ id: article.id, score, embedding: articleVector });
+    samples.push({
+      oldScore: article.score,
+      newScore: score,
+      similarity: maxSimilarity,
+      excluded: excludedBy !== null,
+    });
+  }
+
+  for (const line of buildDistributionSummary(samples)) {
+    console.log(line);
   }
 
   if (dryRun) {

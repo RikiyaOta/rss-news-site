@@ -87,7 +87,8 @@ pnpm check             # 型・リント・整形・Terraform・pinact・L1〜L3
    * **プーリングは必ず `cls` を使用してください。** `bge-m3` の dense 表現は「`[CLS]` トークンの最終隠れ状態を L2 正規化したもの」と定義されています（`mean` は別モデルの流儀です）。Workers AI の `@cf/baai/bge-m3` も公式実装に準拠するため、ここを揃えないと `/api/search` のクエリベクトルと記事ベクトルの空間が食い違います。
    * 埋め込み生成は必ず `src/pipeline/embedder.ts` の `embedText` を経由させ、プーリング戦略を 1 箇所に閉じ込めてください。
    * ベクトルは 1024 次元の L2 正規化済み `Float32Array`（BLOB 4096バイト）を扱います。
-   * **スコア区分の閾値（`src/pipeline/scorer.ts` の `SIMILARITY_BANDS`）は埋め込みモデルが実際に出す類似度レンジに依存します。** モデルやプーリング、プレフィックスを変更したら必ず `pnpm calibrate` で実データの分布を測り直してください。相対比較のテストだけでは「全記事が同じ帯に潰れる」不具合を検知できません。
+   * **スコア区分の閾値（`src/pipeline/scorer.ts` の `SIMILARITY_BANDS`）は埋め込みモデルが実際に出す類似度レンジに依存します。** モデル・プーリング・プレフィックス、および関心テキストの書き方を変更したら、必ず `pnpm rescore --dry-run`（または `Rescore Existing Articles` ワークフローの dry-run）が最後に出す分布サマリーを見て閾値を置き直してください。相対比較のテストだけでは「全記事が同じ帯に潰れる」不具合を検知できません。
+   * **一般的なベンチマークの数字を閾値の根拠にしないでください。** 本プロジェクトは「単語に近い短い関心テキスト」と「タイトル＋要約」を突き合わせる非対称な構成のため、文ペア類似度の常識より大幅に低いレンジ（実測で上限 0.56 前後）に収まります。実際にこれを見誤って上位区分が到達不能になり、全記事が 43 点以下に張り付く不具合を作りました。
 3. **Cloudflare D1 データベース設計:**
    * テーブル: `articles` (`id` PK, `title`, `url` UNIQUE, `source_name`, `summary`, `score`, `published_at`, `published_date_jst`, `embedding` BLOB, `created_at`)
    * インデックス: `idx_articles_jst_score` (`published_date_jst, score DESC`), `idx_articles_url` (`url`), `idx_articles_score` (`score DESC`)
