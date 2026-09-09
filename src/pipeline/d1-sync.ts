@@ -18,6 +18,27 @@ export interface D1SyncResult {
   errors?: any[];
 }
 
+/** 再スコアリング対象として D1 から読み出す記事 */
+export interface RescoreSource {
+  id: string;
+  title: string;
+  summary: string | null;
+  score: number;
+}
+
+/** 再スコアリング結果として D1 へ書き戻す値 */
+export interface RescoreTarget {
+  id: string;
+  score: number;
+  embedding: Float32Array;
+}
+
+export interface RescoreUpdateResult {
+  total: number;
+  updated: number;
+  errors?: any[];
+}
+
 /** migrations/ ディレクトリ (本番 D1 へ wrangler が適用するものと同一) */
 const MIGRATIONS_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -106,6 +127,164 @@ export async function fetchExistingUrlsFromD1(
     }
   }
   return urlSet;
+}
+
+/**
+ * 再スコアリングのため、D1 の全記事からスコアリングに必要な列だけを取得する。
+ *
+ * 件数が増えても 1 回のレスポンスが肥大しないよう id 順にページングする。
+ * embedding (BLOB 4096バイト) は再生成するので読み出さない。
+ */
+export async function fetchAllArticlesForRescore(
+  options: Pick<D1SyncOptions, "accountId" | "databaseId" | "apiToken" | "customFetch"> & {
+    pageSize?: number;
+  },
+): Promise<RescoreSource[]> {
+  const { accountId, databaseId, apiToken, pageSize = 500 } = options;
+  if (!accountId || !databaseId || !apiToken) {
+    throw new Error("Cloudflare D1 設定エラー: accountId, databaseId, apiToken が必要です");
+  }
+
+  const fetchFn = options.customFetch ?? fetch;
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/query`;
+
+  const articles: RescoreSource[] = [];
+  let lastId = "";
+
+  for (;;) {
+    // NOTE: fetchExistingUrlsFromD1 と同じく、行をオブジェクトで返す /query を使う。
+    // /raw は行を値の配列で返すため row.title ではアクセスできない。
+    const response = await fetchFn(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sql: "SELECT id, title, summary, score FROM articles WHERE id > ? ORDER BY id LIMIT ?;",
+        params: [lastId, pageSize],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "");
+      throw new Error(`D1 記事取得失敗: ${response.status} ${errorText}`);
+    }
+
+    const resData = (await response.json()) as any;
+    if (resData?.success === false) {
+      throw new Error(`D1 記事取得失敗: ${JSON.stringify(resData?.errors ?? [])}`);
+    }
+
+    const rows = resData?.result?.[0]?.results;
+    if (!Array.isArray(rows)) {
+      throw new Error(
+        `D1 記事取得のレスポンス形式が想定と異なります: ${JSON.stringify(resData)?.slice(0, 200)}`,
+      );
+    }
+
+    for (const row of rows) {
+      if (typeof row?.id !== "string" || !row.id) continue;
+      articles.push({
+        id: row.id,
+        title: typeof row.title === "string" ? row.title : "",
+        summary: typeof row.summary === "string" ? row.summary : null,
+        score: typeof row.score === "number" ? row.score : 0,
+      });
+      lastId = row.id;
+    }
+
+    if (rows.length < pageSize) break;
+  }
+
+  return articles;
+}
+
+/**
+ * 再スコアリング結果 (score と embedding) を D1 へ書き戻す。
+ *
+ * 記事の同一性は id で確定しているため UPSERT ではなく UPDATE を使う。
+ * published_at など他の列には触れない。
+ */
+export async function updateArticleScores(
+  options: Pick<D1SyncOptions, "accountId" | "databaseId" | "apiToken" | "customFetch"> & {
+    targets: RescoreTarget[];
+    batchSize?: number;
+  },
+): Promise<RescoreUpdateResult> {
+  const { accountId, databaseId, apiToken, targets, batchSize = 5 } = options;
+
+  if (!accountId || !databaseId || !apiToken) {
+    throw new Error("Cloudflare D1 設定エラー: accountId, databaseId, apiToken が必要です");
+  }
+  if (!targets || targets.length === 0) {
+    return { total: 0, updated: 0 };
+  }
+
+  const fetchFn = options.customFetch ?? fetch;
+  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/d1/database/${databaseId}/raw`;
+
+  let updated = 0;
+  const errors: any[] = [];
+
+  for (let i = 0; i < targets.length; i += batchSize) {
+    const chunk = targets.slice(i, i + batchSize);
+    const statements: string[] = [];
+    const params: unknown[] = [];
+
+    for (const target of chunk) {
+      const uint8 = new Uint8Array(
+        target.embedding.buffer,
+        target.embedding.byteOffset,
+        target.embedding.byteLength,
+      );
+      // BLOB は syncArticlesToD1 と同じく X'..' リテラルで埋め込む
+      statements.push(
+        `UPDATE articles SET score = ?, embedding = X'${uint8ArrayToHex(uint8)}' WHERE id = ?;`,
+      );
+      params.push(target.score, target.id);
+    }
+
+    try {
+      const response = await fetchFn(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sql: statements.join("\n"), params }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        let errorJson: any;
+        try {
+          errorJson = JSON.parse(errorText);
+        } catch {
+          errorJson = {
+            message: errorText || `HTTP ${response.status} ${response.statusText}`,
+            status: response.status,
+          };
+        }
+        errors.push(errorJson);
+      } else {
+        const resData = (await response.json()) as any;
+        if (resData?.success === false) {
+          errors.push(...(resData.errors ?? [{ message: "D1 update returned success=false" }]));
+        } else {
+          updated += chunk.length;
+        }
+      }
+    } catch (err: any) {
+      errors.push({ message: err?.message || String(err) });
+    }
+  }
+
+  return {
+    total: targets.length,
+    updated,
+    ...(errors.length > 0 ? { errors } : {}),
+  };
 }
 
 /**

@@ -22,7 +22,6 @@ profile:
   exclude_keywords:
     - "PR記事"
     - "初心者向けチュートリアル"
-  scoring_guidelines: "技術的深みがあり実用的で新規性がある記事を高く評価する"
 `;
       const config = parseConfig(yamlContent);
       expect(config.feeds).toHaveLength(2);
@@ -36,9 +35,6 @@ profile:
       });
       expect(config.profile.interests).toEqual(["TypeScript", "Cloudflare", "AI Agents"]);
       expect(config.profile.exclude_keywords).toEqual(["PR記事", "初心者向けチュートリアル"]);
-      expect(config.profile.scoring_guidelines).toBe(
-        "技術的深みがあり実用的で新規性がある記事を高く評価する",
-      );
     });
 
     it("プロファイル内のオプショナル項目が省略された場合にデフォルト値が適用されること", () => {
@@ -52,7 +48,6 @@ profile: {}
       expect(config.feeds).toHaveLength(1);
       expect(config.profile.interests).toEqual([]);
       expect(config.profile.exclude_keywords).toEqual([]);
-      expect(config.profile.scoring_guidelines).toBe("");
     });
 
     it("ルートがオブジェクトでない（配列やスカラー）場合はエラーを投げること", () => {
@@ -128,7 +123,6 @@ profile: {}
       expect(config.profile).toBeDefined();
       expect(Array.isArray(config.profile.interests)).toBe(true);
       expect(Array.isArray(config.profile.exclude_keywords)).toBe(true);
-      expect(typeof config.profile.scoring_guidelines).toBe("string");
     });
 
     it("存在しないファイルパスが指定された場合にエラーを投げること", () => {

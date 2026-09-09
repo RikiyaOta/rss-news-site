@@ -21,7 +21,6 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
     profile: {
       interests: ["TypeScript", "Cloudflare D1", "BGE-M3"],
       exclude_keywords: ["広告", "PR"],
-      scoring_guidelines: "技術的深さと実用性を重視",
     },
   };
 
@@ -102,6 +101,8 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
           return {
             score: 85,
             maxSimilarity: 0.85,
+            matchedInterest: "TypeScript",
+            excludedBy: null,
             articleVector: new Float32Array(1024).fill(0.05),
           };
         });
@@ -154,6 +155,8 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
         score: 80,
         maxSimilarity: 0.8,
+        matchedInterest: "TypeScript",
+        excludedBy: null,
         articleVector: new Float32Array(1024).fill(0.1),
       });
 
@@ -182,6 +185,8 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
         score: 80,
         maxSimilarity: 0.8,
+        matchedInterest: "TypeScript",
+        excludedBy: null,
         articleVector: new Float32Array(1024).fill(0.1),
       });
 
@@ -208,6 +213,8 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       const scoreSpy = vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
         score: 75,
         maxSimilarity: 0.75,
+        matchedInterest: "TypeScript",
+        excludedBy: null,
         articleVector: new Float32Array(1024).fill(0.1),
       });
 
@@ -259,6 +266,8 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       const scoreSpy = vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
         score: 80,
         maxSimilarity: 0.8,
+        matchedInterest: "TypeScript",
+        excludedBy: null,
         articleVector: new Float32Array(1024).fill(0.1),
       });
       vi.spyOn(scorerModule, "precomputeInterestVectors").mockResolvedValue(new Map());
@@ -310,6 +319,8 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
         score: 80,
         maxSimilarity: 0.8,
+        matchedInterest: "TypeScript",
+        excludedBy: null,
         articleVector: new Float32Array(1024).fill(0.1),
       });
       vi.spyOn(scorerModule, "precomputeInterestVectors").mockResolvedValue(new Map());
@@ -412,6 +423,8 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
       const scoreSpy = vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
         score: 88,
         maxSimilarity: 0.88,
+        matchedInterest: "TypeScript",
+        excludedBy: null,
         articleVector: new Float32Array(1024).fill(0.3),
       });
 

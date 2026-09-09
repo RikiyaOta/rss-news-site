@@ -62,15 +62,11 @@ export function parseConfig(yamlString: string): PipelineConfig {
     ? profileObj.exclude_keywords.filter((k): k is string => typeof k === "string")
     : [];
 
-  const scoringGuidelines =
-    typeof profileObj.scoring_guidelines === "string" ? profileObj.scoring_guidelines : "";
-
   return {
     feeds,
     profile: {
       interests,
       exclude_keywords: excludeKeywords,
-      scoring_guidelines: scoringGuidelines,
     },
   };
 }

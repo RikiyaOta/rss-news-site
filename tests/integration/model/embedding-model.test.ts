@@ -21,6 +21,7 @@ import {
   precomputeInterestVectors,
   scoreArticleWithProfile,
   cosineSimilarity,
+  SIMILARITY_BANDS,
 } from "../../../src/pipeline/scorer";
 import { UserProfile } from "../../../src/shared/types";
 
@@ -29,7 +30,6 @@ const EMBEDDING_DIMENSIONS = 1024;
 const profile: UserProfile = {
   interests: ["TypeScript の型システム", "Cloudflare Workers とエッジコンピューティング"],
   exclude_keywords: ["広告"],
-  scoring_guidelines: "技術的深さと実用性を重視",
 };
 
 const relevantArticle = {
@@ -111,7 +111,7 @@ describe("実モデル (Xenova/bge-m3) を用いた埋め込み生成の統合�
   });
 
   describe("関心プロファイルとの類似度およびスコアリング", () => {
-    it("query: プレフィックス付きの関心ベクトルが関心の数だけ生成されること", async () => {
+    it("関心ベクトルが関心の数だけ生成されること", async () => {
       const vectors = await precomputeInterestVectors(profile.interests);
 
       expect(vectors.size).toBe(profile.interests.length);
@@ -138,6 +138,39 @@ describe("実モデル (Xenova/bge-m3) を用いた埋め込み生成の統合�
       expect(relevantSimilarity).toBeGreaterThan(irrelevantSimilarity + 0.05);
     });
 
+    /**
+     * スコア区分 (SIMILARITY_BANDS) は類似度の絶対値を閾値にしているため、
+     * モデルが実際に出すレンジと区分がずれると全記事が同じ帯に潰れる。
+     * 相対比較だけを見ていると、公開サイトの記事が全件 50 点未満に
+     * 張り付いた不具合をここで検知できないため、絶対値も固定する。
+     */
+    it("関心に合致する記事の類似度がスコア区分の想定レンジに収まること", async () => {
+      const interestVectors = await precomputeInterestVectors(profile.interests);
+      const targetVector = interestVectors.get(profile.interests[1])!;
+
+      const relevantVector = await generateArticleEmbedding(
+        relevantArticle.title,
+        relevantArticle.snippet,
+      );
+      const similarity = cosineSimilarity(relevantVector, targetVector);
+
+      expect(similarity).toBeGreaterThanOrEqual(SIMILARITY_BANDS.medium);
+      expect(similarity).toBeLessThanOrEqual(1);
+    });
+
+    it("無関係な記事の類似度がスコア区分の下端付近に収まること", async () => {
+      const interestVectors = await precomputeInterestVectors(profile.interests);
+      const targetVector = interestVectors.get(profile.interests[1])!;
+
+      const irrelevantVector = await generateArticleEmbedding(
+        irrelevantArticle.title,
+        irrelevantArticle.snippet,
+      );
+      const similarity = cosineSimilarity(irrelevantVector, targetVector);
+
+      expect(similarity).toBeLessThan(SIMILARITY_BANDS.medium);
+    });
+
     it("関心に合致する記事の方が無関係な記事より高いスコアになること", async () => {
       const interestVectors = await precomputeInterestVectors(profile.interests);
 
@@ -158,6 +191,25 @@ describe("実モデル (Xenova/bge-m3) を用いた埋め込み生成の統合�
       expect(relevantResult.score).toBeGreaterThanOrEqual(0);
       expect(relevantResult.score).toBeLessThanOrEqual(100);
       expect(relevantResult.articleVector.length).toBe(EMBEDDING_DIMENSIONS);
+    });
+
+    /**
+     * 「関心に合致する記事」が 40 点にも届かないなら、
+     * それは区分か関心設定が実データと噛み合っていないということ。
+     */
+    it("関心に合致する記事が実用的な点数 (40 点以上) になること", async () => {
+      const interestVectors = await precomputeInterestVectors(profile.interests);
+
+      const result = await scoreArticleWithProfile(
+        relevantArticle.title,
+        relevantArticle.snippet,
+        profile,
+        interestVectors,
+      );
+
+      expect(result.score).toBeGreaterThanOrEqual(40);
+      expect(result.matchedInterest).toBe(profile.interests[1]);
+      expect(result.excludedBy).toBeNull();
     });
   });
 });

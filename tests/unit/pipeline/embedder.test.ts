@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { pipeline } from "@huggingface/transformers";
 import {
-  formatPassageText,
+  formatArticleText,
   l2Normalize,
   getExtractor,
   resetExtractor,
   setExtractor,
   generateArticleEmbedding,
+  MAX_EMBEDDING_TEXT_CHARS,
 } from "../../../src/pipeline/embedder";
 
 const mockDefaultExtractor = vi.fn().mockResolvedValue({
@@ -31,28 +32,68 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
     resetExtractor();
   });
 
-  describe("formatPassageText", () => {
-    it("bge-m3 の仕様に則り passage: プレフィックスを付与し、タイトルと要約を改行で結合すること", () => {
+  describe("formatArticleText", () => {
+    it("タイトルと要約を改行で結合すること", () => {
       const title = "TypeScript 5.8 の新機能解説";
       const summary = "・パフォーマンス改善\n・型推論の強化\n・新機能の追加";
-      const formatted = formatPassageText(title, summary);
+      const formatted = formatArticleText(title, summary);
 
-      expect(formatted).toBe(`passage: ${title}\n${summary}`);
+      expect(formatted).toBe(`${title}\n${summary}`);
+    });
+
+    it("bge-m3 は指示プレフィックスを必要としないため passage: を付与しないこと", () => {
+      const formatted = formatArticleText("タイトル", "要約");
+
+      expect(formatted.startsWith("passage:")).toBe(false);
+      expect(formatted).toBe("タイトル\n要約");
     });
 
     it("タイトルや要約の前後に余分な空白や改行が含まれている場合に適切にトリムされること", () => {
       const title = "  \n  AIエージェントの自律稼働について   \t";
       const summary = " \n ・要約1 \n ・要約2 \n ・要約3   \n ";
-      const formatted = formatPassageText(title, summary);
+      const formatted = formatArticleText(title, summary);
 
-      expect(formatted).toBe(
-        "passage: AIエージェントの自律稼働について\n・要約1 \n ・要約2 \n ・要約3",
-      );
+      expect(formatted).toBe("AIエージェントの自律稼働について\n・要約1 \n ・要約2 \n ・要約3");
     });
 
-    it("空文字列が渡された場合でも passage: プレフィックスと改行を維持すること", () => {
-      const formatted = formatPassageText("", "");
-      expect(formatted).toBe("passage: \n");
+    it("空文字列が渡された場合でも改行区切りを維持すること", () => {
+      const formatted = formatArticleText("", "");
+      expect(formatted).toBe("\n");
+    });
+
+    /**
+     * 本文全体を配信するフィードでは、切らないと数 KB のテキストが
+     * 1 記事のベクトルに入り、タイトルの主題が薄まる。
+     */
+    // "タイトル" (4文字) + 改行 (1文字) = 5文字が要約の前に付く
+    const TITLE_PREFIX_LENGTH = 5;
+
+    it.each([
+      [
+        MAX_EMBEDDING_TEXT_CHARS - 100,
+        MAX_EMBEDDING_TEXT_CHARS - 100 + TITLE_PREFIX_LENGTH,
+        "上限より短い場合は切らない",
+      ],
+      [
+        MAX_EMBEDDING_TEXT_CHARS - TITLE_PREFIX_LENGTH - 1,
+        MAX_EMBEDDING_TEXT_CHARS - 1,
+        "上限の直前は切らない",
+      ],
+      [
+        MAX_EMBEDDING_TEXT_CHARS - TITLE_PREFIX_LENGTH,
+        MAX_EMBEDDING_TEXT_CHARS,
+        "ちょうど上限の場合は切らない",
+      ],
+      [
+        MAX_EMBEDDING_TEXT_CHARS - TITLE_PREFIX_LENGTH + 1,
+        MAX_EMBEDDING_TEXT_CHARS,
+        "上限の直後は上限で切る",
+      ],
+      [MAX_EMBEDDING_TEXT_CHARS * 5, MAX_EMBEDDING_TEXT_CHARS, "極端に長い本文も上限で切る"],
+    ])("要約 %s 文字のとき結合後の長さが %s 文字になること (%s)", (summaryLength, expected) => {
+      const formatted = formatArticleText("タイトル", "あ".repeat(summaryLength));
+
+      expect(formatted.length).toBe(expected);
     });
   });
 
@@ -175,7 +216,12 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
   });
 
   describe("generateArticleEmbedding", () => {
-    it("フォーマットされたテキストと pooling: mean, normalize: true オプションで extractor を呼び出すこと", async () => {
+    /**
+     * bge-m3 の dense 表現は CLS プーリングで定義されている。
+     * Workers AI 側 (@cf/baai/bge-m3) もこれに準拠するため、
+     * ここが mean だと検索クエリとベクトル空間が食い違う。
+     */
+    it("フォーマットされたテキストと pooling: cls, normalize: true オプションで extractor を呼び出すこと", async () => {
       const mockEmbeddingData = new Float32Array(1024).fill(0.05);
       const mockExtractor = vi.fn().mockResolvedValue({
         data: mockEmbeddingData,
@@ -187,13 +233,14 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
 
       const embedding = await generateArticleEmbedding(title, summary, mockExtractor);
 
-      expect(mockExtractor).toHaveBeenCalledWith(`passage: ${title}\n${summary}`, {
-        pooling: "mean",
+      expect(mockExtractor).toHaveBeenCalledWith(`${title}\n${summary}`, {
+        pooling: "cls",
         normalize: true,
       });
       expect(embedding).toBeInstanceOf(Float32Array);
       expect(embedding.length).toBe(1024);
-      expect(embedding[0]).toBeCloseTo(0.05, 5);
+      // 全要素が等しい 1024 次元ベクトルを L2 正規化すると各要素は 1/√1024
+      expect(embedding[0]).toBeCloseTo(1 / Math.sqrt(1024), 5);
     });
 
     it("extractor が生配列（number[]）を返した場合でも Float32Array に変換されること", async () => {
@@ -204,7 +251,21 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
 
       expect(embedding).toBeInstanceOf(Float32Array);
       expect(embedding.length).toBe(1024);
-      expect(embedding[10]).toBeCloseTo(0.01, 5);
+      expect(embedding[10]).toBeGreaterThan(0);
+    });
+
+    it("返却されるベクトルが L2 正規化済みであること", async () => {
+      const mockExtractor = vi.fn().mockResolvedValue({
+        data: new Float32Array(1024).fill(0.05),
+      });
+
+      const embedding = await generateArticleEmbedding("タイトル", "要約", mockExtractor);
+
+      let sumSquares = 0;
+      for (let i = 0; i < embedding.length; i++) {
+        sumSquares += embedding[i] * embedding[i];
+      }
+      expect(Math.sqrt(sumSquares)).toBeCloseTo(1.0, 4);
     });
 
     it("extractorInstance が省略された場合に getExtractor から取得したインスタンスを使用すること", async () => {
@@ -213,13 +274,13 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
       expect(pipeline).toHaveBeenCalledWith("feature-extraction", "Xenova/bge-m3", {
         dtype: "fp16",
       });
-      expect(mockDefaultExtractor).toHaveBeenCalledWith("passage: タイトル\n要約", {
-        pooling: "mean",
+      expect(mockDefaultExtractor).toHaveBeenCalledWith("タイトル\n要約", {
+        pooling: "cls",
         normalize: true,
       });
       expect(embedding).toBeInstanceOf(Float32Array);
       expect(embedding.length).toBe(1024);
-      expect(embedding[0]).toBeCloseTo(0.01, 5);
+      expect(embedding[0]).toBeCloseTo(1 / Math.sqrt(1024), 5);
     });
 
     it("1024次元の埋め込みベクトルが返却されることの検証", async () => {
@@ -233,8 +294,6 @@ describe("多言語ベクトル埋め込み生成モジュール (src/pipeline/e
 
       expect(result.length).toBe(1024);
       expect(result).toBeInstanceOf(Float32Array);
-      expect(result[0]).toBe(dummy1024[0]);
-      expect(result[100]).toBe(dummy1024[100]);
     });
   });
 });

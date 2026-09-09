@@ -6,13 +6,16 @@ import {
   scoreArticleWithProfile,
 } from "../../../src/pipeline/scorer";
 import { UserProfile } from "../../../src/shared/types";
-import { resetExtractor, setExtractor } from "../../../src/pipeline/embedder";
+import {
+  MAX_EMBEDDING_TEXT_CHARS,
+  resetExtractor,
+  setExtractor,
+} from "../../../src/pipeline/embedder";
 
 describe("ローカル多言語埋め込みスコアリングモジュール (src/pipeline/scorer)", () => {
   const mockProfile: UserProfile = {
     interests: ["TypeScript", "React", "Cloudflare", "AI Agents"],
     exclude_keywords: ["PR記事", "スポンサード", "セール"],
-    scoring_guidelines: "",
   };
 
   beforeEach(() => {
@@ -44,25 +47,52 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
      * 実装は 4 つの区分に分かれる。区分をまたぐ境界で点数が飛んだり
      * 逆転したりしないことが重要なので、各区分の上端・下端と
      * その直前直後を表で網羅する。
+     *
+     * 区分の絶対値は bge-m3 が実際に出す類似度のレンジに合わせてある。
+     * この値が実データとずれると全記事が同じ帯に潰れるため、
+     * 変更するときは `pnpm calibrate` の分布を根拠にすること。
      */
     it.each([
       // 類似度,  期待スコア, 意図
       [1.0, 100, "上限"],
-      [0.925, 93, "最上位区分の中央"],
-      [0.85, 85, "最上位区分の下端"],
-      [0.8499, 84, "最上位区分のすぐ下 (上位区分の上端)"],
-      [0.8, 65, "上位区分の下端"],
-      [0.7999, 64, "上位区分のすぐ下 (中位区分の上端)"],
-      [0.73, 40, "中位区分の下端"],
-      [0.7299, 39, "中位区分のすぐ下 (最下位区分の上端)"],
-      [0.615, 19, "最下位区分の中央"],
-      [0.5, 0, "最下位区分の下端"],
+      [0.875, 93, "最上位区分の中央"],
+      [0.75, 85, "最上位区分の下端"],
+      [0.7499, 84, "最上位区分のすぐ下 (上位区分の上端)"],
+      [0.74, 82, "上位区分の上端付近"],
+      [0.65, 65, "上位区分の下端"],
+      [0.6499, 64, "上位区分のすぐ下 (中位区分の上端)"],
+      [0.64, 62, "中位区分の上端付近"],
+      [0.55, 40, "中位区分の下端"],
+      [0.5499, 39, "中位区分のすぐ下 (最下位区分の上端)"],
+      [0.54, 36, "最下位区分の上端付近"],
+      [0.485, 19, "最下位区分の中央"],
+      [0.42, 0, "最下位区分の下端"],
       [0.4, 0, "下端より低い値は 0 でクリップ"],
       [0.0, 0, "ゼロ"],
       [-0.5, 0, "負の類似度も 0 でクリップ"],
     ])("類似度 %s のスコアが %s 点になること (%s)", (similarity, expected) => {
       expect(calculateScoreFromSimilarity(similarity, false)).toBe(expected);
     });
+
+    /**
+     * 修正前は 50 点を取るのに 0.76 以上の類似度が必要で、bge-m3 では
+     * ほぼ到達不可能だったため公開サイトの記事が全件 50 点未満に張り付いていた。
+     * 実運用で現実的に出る類似度が中盤の点数に写ることを固定する。
+     */
+    it.each([
+      [0.45, "無関係な文どうしでも出る水準", 0, 15],
+      [0.6, "関連はするが主題ではない水準", 40, 65],
+      [0.7, "検索ヒット相当の水準", 65, 85],
+      [0.8, "ほぼ言い換えに近い水準", 85, 100],
+    ])(
+      "類似度 %s (%s) のスコアが %s〜%s 点の帯に収まること",
+      (similarity, _label, lower, upper) => {
+        const score = calculateScoreFromSimilarity(similarity, false);
+
+        expect(score).toBeGreaterThanOrEqual(lower);
+        expect(score).toBeLessThanOrEqual(upper);
+      },
+    );
 
     it.each([
       [1.0, 10, "除外キーワードありの上限"],
@@ -99,7 +129,12 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
   });
 
   describe("precomputeInterestVectors - 関心キーワードのベクトル事前計算", () => {
-    it("ユーザー関心キーワード群の query ベクトルを事前計算し、Map に格納すること", async () => {
+    /**
+     * bge-m3 は指示プレフィックスを取らない。加えて "Rust" のような短い関心では
+     * "query: " がトークン列の大半を占めてしまい、記事側との類似度を
+     * 構造的に押し下げるため、プレフィックスは付けない。
+     */
+    it("ユーザー関心キーワードをそのままベクトル化し、Map に格納すること", async () => {
       const mockExtractor = vi.fn().mockImplementation(async () => {
         const raw = new Float32Array(1024).fill(0.1);
         return { data: raw };
@@ -109,12 +144,12 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       const vectorMap = await precomputeInterestVectors(interests, mockExtractor);
 
       expect(mockExtractor).toHaveBeenCalledTimes(2);
-      expect(mockExtractor).toHaveBeenCalledWith("query: TypeScript", {
-        pooling: "mean",
+      expect(mockExtractor).toHaveBeenCalledWith("TypeScript", {
+        pooling: "cls",
         normalize: true,
       });
-      expect(mockExtractor).toHaveBeenCalledWith("query: React", {
-        pooling: "mean",
+      expect(mockExtractor).toHaveBeenCalledWith("React", {
+        pooling: "cls",
         normalize: true,
       });
       expect(vectorMap.size).toBe(2);
@@ -201,8 +236,8 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       );
 
       expect(mockExtractor).toHaveBeenCalledWith(
-        "passage: TypeScript 5.5 新機能まとめ\nReact との親和性が向上しました",
-        { pooling: "mean", normalize: true },
+        "TypeScript 5.5 新機能まとめ\nReact との親和性が向上しました",
+        { pooling: "cls", normalize: true },
       );
       expect(result.score).toBeGreaterThanOrEqual(65);
       expect(result.maxSimilarity).toBeGreaterThan(0.8);
@@ -210,7 +245,7 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       expect(result.articleVector.length).toBe(1024);
     });
 
-    it("除外キーワードが含まれる記事は低スコアになること", async () => {
+    it("除外キーワードが含まれる記事は低スコアになり、該当キーワードを返すこと", async () => {
       const mockExtractor = vi.fn().mockImplementation(async () => ({
         data: new Float32Array(1024).fill(0.5),
       }));
@@ -224,8 +259,92 @@ describe("ローカル多言語埋め込みスコアリングモジュール (sr
       );
 
       expect(result.score).toBeLessThanOrEqual(10);
+      expect(result.excludedBy).toBe("PR記事");
       expect(result.articleVector).toBeInstanceOf(Float32Array);
       expect(result.articleVector.length).toBe(1024);
+    });
+
+    /**
+     * 除外キーワードは部分一致で効くため、意図せず点数を潰していないかを
+     * ログから追えるよう、根拠となったキーワードと関心を必ず返す。
+     */
+    it("除外キーワードに該当しない場合は excludedBy が null になること", async () => {
+      const mockExtractor = vi.fn().mockImplementation(async () => ({
+        data: new Float32Array(1024).fill(0.5),
+      }));
+
+      const result = await scoreArticleWithProfile(
+        "Rust の所有権システム詳解",
+        "借用チェッカの内部実装を追う",
+        mockProfile,
+        undefined,
+        mockExtractor,
+      );
+
+      expect(result.excludedBy).toBeNull();
+    });
+
+    /**
+     * 本文全体を配信するフィードでは snippet が記事まるごとになる。
+     * 照合対象を埋め込み入力と同じ範囲に制限しないと、本文の遠くに 1 度
+     * 出ただけの語で記事が 10 点以下に潰れてしまう。
+     */
+    it("埋め込み入力の上限を超えた位置にある除外キーワードは無視すること", async () => {
+      const mockExtractor = vi.fn().mockImplementation(async () => ({
+        data: new Float32Array(1024).fill(0.5),
+      }));
+
+      const longBody = `${"あ".repeat(MAX_EMBEDDING_TEXT_CHARS)}スポンサード`;
+
+      const result = await scoreArticleWithProfile(
+        "Rust の所有権システム詳解",
+        longBody,
+        mockProfile,
+        undefined,
+        mockExtractor,
+      );
+
+      expect(result.excludedBy).toBeNull();
+      expect(result.score).toBeGreaterThan(10);
+    });
+
+    it("埋め込み入力の範囲内にある除外キーワードは検出すること", async () => {
+      const mockExtractor = vi.fn().mockImplementation(async () => ({
+        data: new Float32Array(1024).fill(0.5),
+      }));
+
+      const result = await scoreArticleWithProfile(
+        "Rust の所有権システム詳解",
+        `スポンサード記事です。${"あ".repeat(100)}`,
+        mockProfile,
+        undefined,
+        mockExtractor,
+      );
+
+      expect(result.excludedBy).toBe("スポンサード");
+    });
+
+    it("最も類似度が高かった関心キーワードを matchedInterest として返すこと", async () => {
+      const cloudflareVector = new Float32Array(1024).fill(1 / Math.sqrt(1024));
+      const otherVector = new Float32Array(1024);
+      otherVector[0] = 1;
+
+      const precomputedMap = new Map<string, Float32Array>([
+        ["TypeScript", otherVector],
+        ["Cloudflare", cloudflareVector],
+      ]);
+
+      const mockExtractor = vi.fn().mockResolvedValue({ data: cloudflareVector });
+
+      const result = await scoreArticleWithProfile(
+        "Cloudflare Workers でのエッジ配信",
+        "D1 と組み合わせた構成",
+        mockProfile,
+        precomputedMap,
+        mockExtractor,
+      );
+
+      expect(result.matchedInterest).toBe("Cloudflare");
     });
 
     it("事前計算済みの関心ベクトルマップを受け取った場合に extractor の再計算を回避すること", async () => {
