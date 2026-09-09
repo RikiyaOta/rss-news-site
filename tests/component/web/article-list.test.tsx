@@ -111,6 +111,29 @@ describe("ArticleList コンポーネント", () => {
       expect(screen.getByText("2026-08-19 の記事はまだありません")).toBeDefined();
     });
 
+    it("空状態は指定したメッセージのみを表示し、補足文を添えないこと", () => {
+      render(
+        <ArticleList
+          articles={[]}
+          isLoading={false}
+          error={null}
+          emptyMessage="キーワードを入力してください"
+        />,
+      );
+      expect(screen.queryByText(/日付を変更するか|お試しください/)).toBeNull();
+    });
+
+    it("loadingVariant が spinner のときはスケルトンを出さずスピナーだけを表示すること", () => {
+      const { container } = render(
+        <ArticleList articles={[]} isLoading={true} error={null} loadingVariant="spinner" />,
+      );
+
+      expect(screen.getByTestId("article-list-loading")).toBeDefined();
+      expect(container.querySelectorAll(".animate-spin")).toHaveLength(1);
+      expect(container.querySelectorAll(".animate-pulse")).toHaveLength(0);
+      expect(screen.queryByText(/読み込み中/)).toBeNull();
+    });
+
     it("読み込み中とエラーが同時のときは読み込み中を優先すること", () => {
       render(<ArticleList articles={[]} isLoading={true} error="エラー" />);
       expect(screen.getByTestId("article-list-loading")).toBeDefined();
