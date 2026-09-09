@@ -12,6 +12,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:e2e": "playwright test",
     "pipeline": "tsx src/pipeline/index.ts",
+    "calibrate": "tsx scripts/calibrate-scoring.mts",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",

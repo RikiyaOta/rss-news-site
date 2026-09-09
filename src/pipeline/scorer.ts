@@ -1,5 +1,28 @@
 import { UserProfile } from "../shared/types";
-import { getExtractor, l2Normalize } from "./embedder";
+import { embedText, generateArticleEmbedding } from "./embedder";
+
+/**
+ * 類似度からスコアへ変換する区分の境界。
+ *
+ * bge-m3 の cos 類似度は 0〜1 に一様には広がらない。埋め込み空間の異方性により
+ * 無関係な自然文どうしでも 0.3〜0.45 程度は出る一方、実際の検索ヒット
+ * （クエリと関連文書）は概ね 0.55〜0.75 に収まり、0.85 を超えるのは
+ * ほぼ言い換えに近い場合に限られる。
+ *
+ * 区分の下端を「無関係な文どうしでも出てしまう水準」に置き、上端を
+ * 「実運用で到達しうる上限」に置くことで、0〜100 点を実際に使い切る。
+ * 実コーパスでの分布は `pnpm calibrate` で確認できる。
+ */
+export const SIMILARITY_BANDS = {
+  /** ここを超えると 85〜100 点。ほぼ言い換えに近い一致 */
+  excellent: 0.75,
+  /** ここを超えると 65〜85 点。明確に関心テーマの記事 */
+  high: 0.65,
+  /** ここを超えると 40〜65 点。関連はしているが主題ではない */
+  medium: 0.55,
+  /** ここを下回ると 0 点。無関係な文どうしでも出る水準 */
+  floor: 0.42,
+} as const;
 
 /**
  * コサイン類似度（内積）を計算する
@@ -23,18 +46,20 @@ export function calculateScoreFromSimilarity(
     return Math.min(10, Math.max(0, Math.round(maxSimilarity * 10)));
   }
 
+  const { excellent, high, medium, floor } = SIMILARITY_BANDS;
+
   let score: number;
-  if (maxSimilarity >= 0.85) {
-    const ratio = Math.min(1, (maxSimilarity - 0.85) / 0.15);
+  if (maxSimilarity >= excellent) {
+    const ratio = Math.min(1, (maxSimilarity - excellent) / (1 - excellent));
     score = 85 + 15 * ratio;
-  } else if (maxSimilarity >= 0.8) {
-    const ratio = (maxSimilarity - 0.8) / 0.05;
+  } else if (maxSimilarity >= high) {
+    const ratio = (maxSimilarity - high) / (excellent - high);
     score = 65 + 19 * ratio;
-  } else if (maxSimilarity >= 0.73) {
-    const ratio = (maxSimilarity - 0.73) / 0.07;
+  } else if (maxSimilarity >= medium) {
+    const ratio = (maxSimilarity - medium) / (high - medium);
     score = 40 + 24 * ratio;
   } else {
-    const ratio = Math.max(0, (maxSimilarity - 0.5) / 0.23);
+    const ratio = Math.max(0, (maxSimilarity - floor) / (medium - floor));
     score = 39 * ratio;
   }
 
@@ -42,24 +67,31 @@ export function calculateScoreFromSimilarity(
 }
 
 /**
- * ユーザー関心キーワード群の query ベクトルを事前計算する
+ * ユーザー関心キーワード群のベクトルを事前計算する
  */
 export async function precomputeInterestVectors(
   interests: string[],
   extractorParam?: any,
 ): Promise<Map<string, Float32Array>> {
-  const extractor = extractorParam ?? (await getExtractor());
   const vectorMap = new Map<string, Float32Array>();
 
   for (const interest of interests) {
     if (!interest || !interest.trim()) continue;
-    const text = `query: ${interest.trim()}`;
-    const output = await extractor(text, { pooling: "mean", normalize: true });
-    const rawData = output?.data ?? output;
-    vectorMap.set(interest.trim(), l2Normalize(new Float32Array(rawData)));
+    const text = interest.trim();
+    vectorMap.set(text, await embedText(text, extractorParam));
   }
 
   return vectorMap;
+}
+
+export interface ArticleScore {
+  score: number;
+  maxSimilarity: number;
+  /** 最も類似度が高かった関心キーワード（スコアの根拠を追えるようにする） */
+  matchedInterest: string;
+  /** スコアを 10 点以下に抑え込んだ除外キーワード。該当なしの場合は null */
+  excludedBy: string | null;
+  articleVector: Float32Array;
 }
 
 /**
@@ -71,36 +103,34 @@ export async function scoreArticleWithProfile(
   profile: UserProfile,
   precomputedVectors?: Map<string, Float32Array>,
   extractorParam?: any,
-): Promise<{ score: number; maxSimilarity: number; articleVector: Float32Array }> {
-  const extractor = extractorParam ?? (await getExtractor());
-
+): Promise<ArticleScore> {
   // 1. 記事ベクトルの生成
-  const passageText = `passage: ${title.trim()}\n${(snippet || "").trim()}`;
-  const output = await extractor(passageText, { pooling: "mean", normalize: true });
-  const rawData = output?.data ?? output;
-  const articleVector = l2Normalize(new Float32Array(rawData));
+  const articleVector = await generateArticleEmbedding(title, snippet || "", extractorParam);
 
   // 2. 関心ベクトルの準備
   const interestVectors =
-    precomputedVectors ?? (await precomputeInterestVectors(profile.interests, extractor));
+    precomputedVectors ?? (await precomputeInterestVectors(profile.interests, extractorParam));
 
   // 3. 最大コサイン類似度の算出
   let maxSimilarity = 0;
-  for (const [, targetVector] of interestVectors) {
+  let matchedInterest = "";
+  for (const [interest, targetVector] of interestVectors) {
     const sim = cosineSimilarity(articleVector, targetVector);
     if (sim > maxSimilarity) {
       maxSimilarity = sim;
+      matchedInterest = interest;
     }
   }
 
   // 4. 除外キーワードの検出
   const fullText = `${title} ${snippet}`.toLowerCase();
-  const hasExclude = profile.exclude_keywords.some(
-    (kw) => kw.trim() && fullText.includes(kw.trim().toLowerCase()),
-  );
+  const excludedBy =
+    profile.exclude_keywords.find(
+      (kw) => kw.trim() && fullText.includes(kw.trim().toLowerCase()),
+    ) ?? null;
 
   // 5. スコア計算
-  const score = calculateScoreFromSimilarity(maxSimilarity, hasExclude);
+  const score = calculateScoreFromSimilarity(maxSimilarity, excludedBy !== null);
 
-  return { score, maxSimilarity, articleVector };
+  return { score, maxSimilarity, matchedInterest, excludedBy, articleVector };
 }

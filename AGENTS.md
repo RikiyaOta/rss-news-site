@@ -83,9 +83,11 @@ pnpm check             # 型・リント・整形・Terraform・pinact・L1〜L3
    * 記事の公開日時（`published_at`）から日本標準時（JST）の日付（`published_date_jst`）を算出して保存します。
    * **画面の日付はフィードの公開日時のみを正とします。** 収集時刻を公開日時の代替として使用してはいけません。公開日時を取得できない記事は取り込まず（`fetcher` で除外）、UPSERT では公開日が後の日付へ前進しないよう `MIN()` で保持します。
 2. **多言語ベクトル埋め込み (`BAAI/bge-m3`):**
-   * 記事登録（インデックス化）時のテキストには必ず **`"passage: "`** プレフィックスを付与してください（例: `"passage: {title}\n{summary}"`）。
-   * 検索クエリのベクトル化時には必ず **`"query: "`** プレフィックスを付与してください。
+   * **指示プレフィックスを付与してはいけません。** `bge-m3` は query / passage いずれにも指示を必要としません。`"query: "` / `"passage: "` は `multilingual-e5` 系の流儀であり（本プロジェクトも当初は `multilingual-e5-small` を使っていました）、`bge-m3` に付けると単なるノイズになります。とくに `"Rust"` のような短い関心テキストではプレフィックスがトークン列の大半を占め、記事側との類似度を構造的に押し下げます。
+   * **プーリングは必ず `cls` を使用してください。** `bge-m3` の dense 表現は「`[CLS]` トークンの最終隠れ状態を L2 正規化したもの」と定義されています（`mean` は別モデルの流儀です）。Workers AI の `@cf/baai/bge-m3` も公式実装に準拠するため、ここを揃えないと `/api/search` のクエリベクトルと記事ベクトルの空間が食い違います。
+   * 埋め込み生成は必ず `src/pipeline/embedder.ts` の `embedText` を経由させ、プーリング戦略を 1 箇所に閉じ込めてください。
    * ベクトルは 1024 次元の L2 正規化済み `Float32Array`（BLOB 4096バイト）を扱います。
+   * **スコア区分の閾値（`src/pipeline/scorer.ts` の `SIMILARITY_BANDS`）は埋め込みモデルが実際に出す類似度レンジに依存します。** モデルやプーリング、プレフィックスを変更したら必ず `pnpm calibrate` で実データの分布を測り直してください。相対比較のテストだけでは「全記事が同じ帯に潰れる」不具合を検知できません。
 3. **Cloudflare D1 データベース設計:**
    * テーブル: `articles` (`id` PK, `title`, `url` UNIQUE, `source_name`, `summary`, `score`, `published_at`, `published_date_jst`, `embedding` BLOB, `created_at`)
    * インデックス: `idx_articles_jst_score` (`published_date_jst, score DESC`), `idx_articles_url` (`url`), `idx_articles_score` (`score DESC`)

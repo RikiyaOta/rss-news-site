@@ -143,18 +143,26 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
       const raw = targetArticles[i];
       const percent = Math.round(((i + 1) / targetArticles.length) * 100);
 
-      const { score, articleVector } = await scoreArticleWithProfile(
-        raw.title,
-        raw.snippet,
-        config.profile,
-        interestVectors,
-        extractorInstance,
-      );
+      const { score, maxSimilarity, matchedInterest, excludedBy, articleVector } =
+        await scoreArticleWithProfile(
+          raw.title,
+          raw.snippet,
+          config.profile,
+          interestVectors,
+          extractorInstance,
+        );
 
       const publishedDateJst = computePublishedDateJst(raw.published_at);
 
+      // スコアの根拠（どの関心と何点の類似度で照合されたか、除外が効いたか）を
+      // 残しておかないと、点数が低いときに閾値の問題なのか関心設定の問題なのか
+      // ログから切り分けられない。
+      const reason = excludedBy
+        ? `除外: ${excludedBy}`
+        : `${matchedInterest} sim=${maxSimilarity.toFixed(3)}`;
+
       console.log(
-        `  [AI ${i + 1}/${targetArticles.length} (${percent}%)] スコア: ${score.toString().padStart(3, " ")}点 | [${raw.source_name}] ${raw.title.slice(0, 40)}`,
+        `  [AI ${i + 1}/${targetArticles.length} (${percent}%)] スコア: ${score.toString().padStart(3, " ")}点 (${reason}) | [${raw.source_name}] ${raw.title.slice(0, 40)}`,
       );
 
       const article: ArticleInput = {
