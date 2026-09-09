@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { Article, SearchResultItem } from "../../shared/types";
+import { getFaviconUrl } from "../lib/favicon";
 import { ExternalLink, Sparkles, Calendar, Tag } from "lucide-react";
 
 export interface ArticleCardProps {
@@ -45,6 +47,40 @@ function formatPublishedDate(isoStr: string): string {
   }
 }
 
+/**
+ * 配信元サイトの favicon。
+ *
+ * 記事 URL からホスト名を解決できない場合と、画像の取得に失敗した場合は
+ * 汎用アイコンへフォールバックする。配信元名は隣にテキストで併記されるため、
+ * 画像自体は装飾として扱う (alt="")。
+ */
+function SourceFavicon({ articleUrl }: { articleUrl: string }) {
+  const faviconUrl = getFaviconUrl(articleUrl);
+  const [isBroken, setIsBroken] = useState(false);
+
+  if (!faviconUrl || isBroken) {
+    return (
+      <Tag data-testid="source-favicon-fallback" className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+    );
+  }
+
+  return (
+    <img
+      data-testid="source-favicon"
+      src={faviconUrl}
+      alt=""
+      aria-hidden="true"
+      width={14}
+      height={14}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      className="w-3.5 h-3.5 shrink-0 rounded-sm object-contain"
+      onError={() => setIsBroken(true)}
+    />
+  );
+}
+
 export function ArticleCard({ article }: ArticleCardProps) {
   const isSearchResult =
     "similarity" in article && typeof (article as SearchResultItem).similarity === "number";
@@ -61,7 +97,8 @@ export function ArticleCard({ article }: ArticleCardProps) {
         <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-              <Tag className="w-3 h-3 text-zinc-500" />
+              {/* 配信元の favicon。記事ごとに URL が変わるため key で状態を作り直す */}
+              <SourceFavicon key={article.url} articleUrl={article.url} />
               {article.source_name}
             </span>
 

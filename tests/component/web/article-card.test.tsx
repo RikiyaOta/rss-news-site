@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ArticleCard } from "../../../src/web/components/ArticleCard";
 import { Article, SearchResultItem } from "../../../src/shared/types";
 
@@ -81,5 +81,35 @@ describe("ArticleCard コンポーネント", () => {
     expect(simBadge).toBeDefined();
     expect(simBadge.textContent).toContain("92%");
     expect(screen.getByText(/2026-08-18/)).toBeDefined();
+  });
+
+  describe("配信元 favicon", () => {
+    it("記事 URL のホストから解決した favicon が配信元バッジに表示されること", () => {
+      render(<ArticleCard article={mockArticle} />);
+
+      const favicon = screen.getByTestId("source-favicon") as HTMLImageElement;
+      expect(favicon.tagName).toBe("IMG");
+      expect(favicon.getAttribute("src")).toContain("example.com");
+      // 配信元名がテキストで併記されるため、画像は装飾として扱う
+      expect(favicon.getAttribute("alt")).toBe("");
+      expect(screen.queryByTestId("source-favicon-fallback")).toBeNull();
+    });
+
+    it("favicon の読み込みに失敗した場合、代替アイコンへフォールバックすること", () => {
+      render(<ArticleCard article={mockArticle} />);
+
+      fireEvent.error(screen.getByTestId("source-favicon"));
+
+      expect(screen.queryByTestId("source-favicon")).toBeNull();
+      expect(screen.getByTestId("source-favicon-fallback")).toBeDefined();
+      expect(screen.getByText("Tech Blog")).toBeDefined();
+    });
+
+    it("記事 URL からホストを解決できない場合、代替アイコンが表示されること", () => {
+      render(<ArticleCard article={{ ...mockArticle, url: "not-a-url" }} />);
+
+      expect(screen.queryByTestId("source-favicon")).toBeNull();
+      expect(screen.getByTestId("source-favicon-fallback")).toBeDefined();
+    });
   });
 });
