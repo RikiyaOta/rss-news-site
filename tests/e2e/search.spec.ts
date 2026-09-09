@@ -18,7 +18,7 @@ test.describe("セマンティック検索", () => {
   const searchResults = (page: Page) => page.getByTestId("search-view").getByTestId("article-card");
 
   async function search(page: Page, query: string) {
-    await page.getByPlaceholder(/自然言語で検索/).fill(query);
+    await page.getByPlaceholder(/キーワードで検索/).fill(query);
     await page.getByRole("button", { name: "検索", exact: true }).click();
   }
 
@@ -75,7 +75,7 @@ test.describe("セマンティック検索", () => {
     expect(values).toEqual([...values].sort((a, b) => b - a));
   });
 
-  test("クリアで検索がリセットされ日別一覧へ戻ること", async ({ page }) => {
+  test("クリアで入力と検索結果がリセットされ、検索画面に留まること", async ({ page }) => {
     await search(page, "TypeScript");
     await expect(
       page.getByTestId("search-view").getByTestId("similarity-badge").first(),
@@ -83,13 +83,21 @@ test.describe("セマンティック検索", () => {
 
     await page.getByRole("button", { name: "クリア" }).click();
 
-    await expect(page.getByPlaceholder(/自然言語で検索/)).not.toBeVisible();
-    await expect(page.getByTestId("date-picker-input")).toHaveValue(TODAY);
-    await expect(page.getByTestId("daily-view").getByTestId("article-card").first()).toBeVisible();
+    // 検索画面のまま入力欄が空になり、結果だけが消える
+    await expect(page.getByPlaceholder(/キーワードで検索/)).toHaveValue("");
+    await expect(searchResults(page)).toHaveCount(0);
+    await expect(page.getByText("キーワードを入力してください")).toBeVisible();
+  });
+
+  test("検索を実行するまで未ヒットの文言が表示されないこと", async ({ page }) => {
+    await page.getByPlaceholder(/キーワードで検索/).fill("該当なしのはずのクエリ");
+
+    await expect(page.getByText("キーワードを入力してください")).toBeVisible();
+    await expect(page.getByText(/一致する記事はありません/)).toHaveCount(0);
   });
 
   test("空白のみのクエリでは検索ボタンが押せないこと", async ({ page }) => {
-    await page.getByPlaceholder(/自然言語で検索/).fill("   ");
+    await page.getByPlaceholder(/キーワードで検索/).fill("   ");
 
     await expect(page.getByRole("button", { name: "検索", exact: true })).toBeDisabled();
     await expect(page.getByTestId("search-view").getByTestId("similarity-badge")).toHaveCount(0);

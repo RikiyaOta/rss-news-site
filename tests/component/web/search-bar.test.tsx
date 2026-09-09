@@ -24,6 +24,39 @@ describe("SearchBar コンポーネント", () => {
     expect(screen.getByRole("button", { name: /クリア/i })).toBeDefined();
   });
 
+  it("プレースホルダーは例示を含まない短い文言であること", () => {
+    render(
+      <SearchBar
+        query=""
+        onQueryChange={() => {}}
+        onSearch={() => {}}
+        onClear={() => {}}
+        isLoading={false}
+      />,
+    );
+
+    const placeholder = (screen.getByRole("textbox") as HTMLInputElement).placeholder;
+    expect(placeholder).toBe("キーワードで検索");
+  });
+
+  it.each([
+    { name: "検索", note: "検索ボタンはアイコンのみで文字ラベルを持たないこと" },
+    { name: "クリア", note: "クリアボタンはアイコンのみで文字ラベルを持たないこと" },
+  ])("$note", ({ name }) => {
+    render(
+      <SearchBar
+        query="TypeScript"
+        onQueryChange={() => {}}
+        onSearch={() => {}}
+        onClear={() => {}}
+        isLoading={false}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name });
+    expect(button.textContent).toBe("");
+  });
+
   it("Enterキー押下または検索ボタンクリックで onSearch が実行されること", () => {
     const handleSearch = vi.fn();
     render(
@@ -62,7 +95,7 @@ describe("SearchBar コンポーネント", () => {
     expect(handleClear).toHaveBeenCalledTimes(1);
   });
 
-  it("ローディング中の場合、スピナーが表示されボタンや入力が無効化されること", () => {
+  it("ローディング中は入力とボタンが無効化されること", () => {
     render(
       <SearchBar
         query="LangChain"
@@ -73,9 +106,27 @@ describe("SearchBar コンポーネント", () => {
       />,
     );
 
-    expect(screen.getAllByText(/検索中|ベクトル化中/).length).toBeGreaterThan(0);
     const input = screen.getByPlaceholderText(/検索/) as HTMLInputElement;
     expect(input.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "検索" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "クリア" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+
+  it("ローディング中も検索バーにはスピナーや進捗の説明文を出さないこと", () => {
+    const { container } = render(
+      <SearchBar
+        query="LangChain"
+        onQueryChange={() => {}}
+        onSearch={() => {}}
+        onClear={() => {}}
+        isLoading={true}
+      />,
+    );
+
+    expect(container.querySelectorAll(".animate-spin")).toHaveLength(0);
+    expect(screen.queryByText(/検索中|ベクトル|Workers AI/)).toBeNull();
   });
 
   describe("キーボード操作", () => {

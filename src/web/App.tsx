@@ -25,6 +25,8 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchError, setSearchError] = useState<string | null>(null);
+  // 実際に検索を実行したクエリ。未実行のうちは null で、入力途中に未ヒット表示を出さないための目印
+  const [searchedQuery, setSearchedQuery] = useState<string | null>(null);
 
   const { getPage, ensurePage, reloadPage, loadMore } = useDailyArticleStore({
     pageSize: PAGE_SIZE,
@@ -78,6 +80,7 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
 
     setIsSearching(true);
     setSearchError(null);
+    setSearchedQuery(trimmed);
     setMode("search");
 
     try {
@@ -93,11 +96,11 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
     }
   };
 
-  // 検索クリア
+  // 検索クリア。入力と結果だけを消し、検索画面には留まる
   const handleClearSearch = () => {
     setSearchQuery("");
     setSearchResults([]);
-    setMode("daily");
+    setSearchedQuery(null);
     setSearchError(null);
   };
 
@@ -179,11 +182,12 @@ export function App({ initialDate, apiBaseUrl = "" }: AppProps) {
             <ArticleList
               articles={searchResults}
               isLoading={isSearching}
+              loadingVariant="spinner"
               error={searchError}
               emptyMessage={
-                searchQuery
-                  ? `「${searchQuery}」に一致する記事は見つかりませんでした`
-                  : "自然言語キーワードを入力して記事を検索してください"
+                searchedQuery
+                  ? `「${searchedQuery}」に一致する記事はありません`
+                  : "キーワードを入力してください"
               }
               onRetry={handleSearch}
             />

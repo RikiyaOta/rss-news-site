@@ -143,24 +143,90 @@ describe("フロントエンド App コンポーネントのテスト", () => {
     expect(screen.getByText(/94%/)).toBeDefined();
   });
 
-  it("検索結果表示中にクリアボタンを押すと日別一覧表示に戻ること", async () => {
-    render(<App initialDate="2026-08-19" />);
+  describe("セマンティック検索画面", () => {
+    /** アプリを描画して検索モードへ切り替え、入力欄を返す */
+    async function enterSearchMode() {
+      render(<App initialDate="2026-08-19" />);
+      await screen.findByText("本日のおすすめAIニュース");
+      fireEvent.click(screen.getByRole("button", { name: /セマンティック検索/i }));
+      return screen.getByPlaceholderText(/検索/) as HTMLInputElement;
+    }
 
-    await screen.findByText("本日のおすすめAIニュース");
+    /** タブは CSS の hidden で切り替わるため、可視判定はクラスで行う */
+    function isVisible(testId: string) {
+      return !screen.getByTestId(testId).className.includes("hidden");
+    }
 
-    const searchModeBtn = screen.getByRole("button", { name: /セマンティック検索/i });
-    fireEvent.click(searchModeBtn);
+    it("検索前の空状態はキーワード入力を促す短い文言のみであること", async () => {
+      await enterSearchMode();
 
-    const searchInput = screen.getByPlaceholderText(/検索/);
-    fireEvent.change(searchInput, { target: { value: "bge-m3" } });
-    fireEvent.click(screen.getByRole("button", { name: /^検索$/ }));
+      expect(screen.getByText("キーワードを入力してください")).toBeDefined();
+      expect(screen.queryByText(/自然言語|お試しください/)).toBeNull();
+    });
 
-    expect(await screen.findByText("Workers AI と BGE-M3 による高速推論検証")).toBeDefined();
+    it("入力しただけで検索を実行していない間は未ヒットの文言を表示しないこと", async () => {
+      const input = await enterSearchMode();
 
-    const clearBtn = screen.getByRole("button", { name: /クリア/i });
-    fireEvent.click(clearBtn);
+      fireEvent.change(input, { target: { value: "bge-m3" } });
 
-    expect(await screen.findByText("本日のおすすめAIニュース")).toBeDefined();
+      expect(apiClient.searchArticles).not.toHaveBeenCalled();
+      expect(screen.queryByText(/見つかりませんでした|一致する記事はありません/)).toBeNull();
+      expect(screen.getByText("キーワードを入力してください")).toBeDefined();
+    });
+
+    it("検索を実行して 0 件だった場合にのみ未ヒットの文言を表示すること", async () => {
+      vi.mocked(apiClient.searchArticles).mockResolvedValue([]);
+      const input = await enterSearchMode();
+
+      fireEvent.change(input, { target: { value: "存在しない話題" } });
+      fireEvent.click(screen.getByRole("button", { name: /^検索$/ }));
+
+      expect(await screen.findByText("「存在しない話題」に一致する記事はありません")).toBeDefined();
+    });
+
+    it("検索中はスピナーのみを表示し、進捗の説明文を出さないこと", async () => {
+      let resolveSearch: (results: SearchResultItem[]) => void = () => {};
+      vi.mocked(apiClient.searchArticles).mockImplementation(
+        () =>
+          new Promise<SearchResultItem[]>((resolve) => {
+            resolveSearch = resolve;
+          }),
+      );
+
+      const input = await enterSearchMode();
+      fireEvent.change(input, { target: { value: "bge-m3" } });
+      fireEvent.click(screen.getByRole("button", { name: /^検索$/ }));
+
+      const searchView = await screen.findByTestId("search-view");
+      await waitFor(() => {
+        expect(searchView.querySelectorAll(".animate-spin").length).toBeGreaterThan(0);
+      });
+
+      expect(searchView.querySelectorAll(".animate-pulse")).toHaveLength(0);
+      expect(searchView.querySelectorAll(".animate-spin")).toHaveLength(1);
+      expect(screen.queryByText(/ベクトル検索中|記事データを読み込み中/)).toBeNull();
+
+      resolveSearch(mockSearchResults);
+      expect(await screen.findByText("Workers AI と BGE-M3 による高速推論検証")).toBeDefined();
+    });
+
+    it("クリアを押しても検索画面に留まり、入力と検索結果だけがリセットされること", async () => {
+      const input = await enterSearchMode();
+
+      fireEvent.change(input, { target: { value: "bge-m3" } });
+      fireEvent.click(screen.getByRole("button", { name: /^検索$/ }));
+      expect(await screen.findByText("Workers AI と BGE-M3 による高速推論検証")).toBeDefined();
+
+      fireEvent.click(screen.getByRole("button", { name: /クリア/i }));
+
+      await waitFor(() => {
+        expect(screen.queryByText("Workers AI と BGE-M3 による高速推論検証")).toBeNull();
+      });
+      expect(isVisible("search-view")).toBe(true);
+      expect(isVisible("daily-view")).toBe(false);
+      expect((screen.getByPlaceholderText(/検索/) as HTMLInputElement).value).toBe("");
+      expect(screen.getByText("キーワードを入力してください")).toBeDefined();
+    });
   });
 
   it("該当日の記事が0件の場合に空状態メッセージが表示されること", async () => {

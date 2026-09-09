@@ -14,6 +14,11 @@ export interface ArticleListProps {
   isLoading: boolean;
   error: string | null;
   emptyMessage?: string;
+  /**
+   * 初回ロード中の見せ方。
+   * `skeleton` は件数の目安が付く日別一覧向け、`spinner` は待つだけの検索向け。
+   */
+  loadingVariant?: "skeleton" | "spinner";
   onRetry?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
@@ -31,6 +36,7 @@ export function ArticleList({
   isLoading,
   error,
   emptyMessage = "記事が見つかりませんでした",
+  loadingVariant = "skeleton",
   onRetry,
   hasMore = false,
   isLoadingMore = false,
@@ -73,6 +79,17 @@ export function ArticleList({
 
   // ローディング状態（初回ロード）
   if (isLoading) {
+    if (loadingVariant === "spinner") {
+      return (
+        <div
+          data-testid="article-list-loading"
+          className="w-full flex items-center justify-center py-16"
+        >
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        </div>
+      );
+    }
+
     return (
       <div data-testid="article-list-loading" className="w-full">
         <div className="flex items-center justify-center gap-2 py-8 text-sm text-zinc-500 dark:text-zinc-400">
@@ -132,12 +149,7 @@ export function ArticleList({
     return (
       <div className="w-full max-w-md mx-auto my-16 p-8 text-center bg-white dark:bg-zinc-900/50 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800">
         <Inbox className="w-12 h-12 mx-auto text-zinc-400 dark:text-zinc-600 mb-3" />
-        <h3 className="text-base font-semibold text-zinc-800 dark:text-zinc-200 mb-1">
-          {emptyMessage}
-        </h3>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          日付を変更するか、別の検索クエリをお試しください。
-        </p>
+        <h3 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">{emptyMessage}</h3>
       </div>
     );
   }
