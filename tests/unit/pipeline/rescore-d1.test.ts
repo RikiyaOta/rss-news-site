@@ -137,7 +137,7 @@ describe("再スコアリング用の D1 アクセス (src/pipeline/d1-sync)", (
      * 記事の同一性は id で確定しているため UPSERT ではなく UPDATE を使う。
      * published_at など他の列に触れてしまうと、公開日が壊れる。
      */
-    it("id 指定の UPDATE で score と embedding のみを更新すること", async () => {
+    it("id で対応付けて score と embedding のみを更新すること", async () => {
       const customFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({ success: true }),
@@ -152,10 +152,47 @@ describe("再スコアリング用の D1 アクセス (src/pipeline/d1-sync)", (
       expect(result).toEqual({ total: 2, updated: 2 });
 
       const body = JSON.parse(customFetch.mock.calls[0][1].body);
-      expect(body.sql).toContain("UPDATE articles SET score = ?, embedding = X'");
-      expect(body.sql).toContain("WHERE id = ?");
+      expect(body.sql).toContain("UPDATE articles");
+      expect(body.sql).toContain("SET score = v.column2, embedding = v.column3");
+      expect(body.sql).toContain("WHERE articles.id = v.column1");
       expect(body.sql).not.toContain("published_at");
-      expect(body.params).toEqual([72, "aaa", 15, "bbb"]);
+      expect(body.params).toEqual(["aaa", 72, "bbb", 15]);
+    });
+
+    /**
+     * D1 は複数ステートメントと params の併用を拒否する
+     * ("The request is malformed: params with multiple statements is not supported")。
+     * 以前は `UPDATE ...;` をバッチ件数だけ連結して送っており、端数の 1 件だけが通って
+     * 残り全件が失敗していた（本番 2256 件中 1 件しか更新できなかった）。
+     */
+    it.each([
+      [1, "1 件のバッチ"],
+      [2, "複数件のバッチ"],
+      [5, "既定のバッチサイズ"],
+    ])("%s 件を送るときも 1 リクエスト 1 ステートメントであること (%s)", async (count) => {
+      const customFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as unknown as Response);
+
+      await updateArticleScores({
+        ...credentials,
+        targets: Array.from({ length: count }, (_, i) => ({
+          id: `id-${i}`,
+          score: i,
+          embedding: new Float32Array(1024).fill(0.1),
+        })),
+        batchSize: count,
+        customFetch: customFetch as unknown as typeof fetch,
+      });
+
+      const body = JSON.parse(customFetch.mock.calls[0][1].body);
+      // 末尾のセミコロンを除くと、文の区切りが 1 つも残らないこと
+      const withoutTrailing = body.sql.trim().replace(/;$/, "");
+      expect(withoutTrailing).not.toContain(";");
+      // 件数分の値タプルが 1 ステートメント内に並ぶこと
+      expect(body.sql.match(/X'/g)).toHaveLength(count);
+      expect(body.params).toHaveLength(count * 2);
     });
 
     it("埋め込みベクトルが 4096 バイトの BLOB リテラルとして送られること", async () => {
@@ -174,6 +211,28 @@ describe("再スコアリング用の D1 アクセス (src/pipeline/d1-sync)", (
       const hex = body.sql.match(/X'([0-9a-f]+)'/)![1];
       // 1024 次元 × 4 バイト = 4096 バイト → 16 進表記で 8192 文字
       expect(hex).toHaveLength(8192);
+    });
+
+    /**
+     * SQLite の VALUES 句は列名を column1, column2, ... で参照する。
+     * `AS v(id, score, embedding)` の列名指定構文は SQLite には無いため、
+     * それを使うと構文エラーになる。
+     */
+    it("VALUES 句に SQLite が解釈できない列名指定構文を使わないこと", async () => {
+      const customFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true }),
+      } as unknown as Response);
+
+      await updateArticleScores({
+        ...credentials,
+        targets,
+        customFetch: customFetch as unknown as typeof fetch,
+      });
+
+      const body = JSON.parse(customFetch.mock.calls[0][1].body);
+      expect(body.sql).toContain(") AS v\n");
+      expect(body.sql).not.toMatch(/AS\s+v\s*\(/);
     });
 
     it("バッチサイズ毎にリクエストが分割されること", async () => {

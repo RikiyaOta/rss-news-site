@@ -33,6 +33,8 @@ export interface RescoreResult {
   updated: number;
   /** スコアが変化した件数（dry-run でも数える） */
   changed: number;
+  /** dry-run では D1 を更新しないため、updated < total でも失敗ではない */
+  dryRun: boolean;
   errors?: any[];
 }
 
@@ -143,7 +145,7 @@ export async function runRescore(options: RescoreOptions = {}): Promise<RescoreR
   console.log(`  ${articles.length} 件の記事を取得しました。`);
 
   if (articles.length === 0) {
-    return { total: 0, updated: 0, changed: 0 };
+    return { total: 0, updated: 0, changed: 0, dryRun };
   }
 
   console.log(`\n========================================`);
@@ -210,7 +212,7 @@ export async function runRescore(options: RescoreOptions = {}): Promise<RescoreR
       `✅ 再スコアリング (dry-run) 完了 (対象: ${articles.length}件, 変化: ${changed}件)`,
     );
     console.log(`========================================\n`);
-    return { total: articles.length, updated: 0, changed };
+    return { total: articles.length, updated: 0, changed, dryRun };
   }
 
   console.log(`\n[3/3] ☁️ Cloudflare D1 へ ${targets.length} 件の更新を反映中...`);
@@ -225,19 +227,41 @@ export async function runRescore(options: RescoreOptions = {}): Promise<RescoreR
 
   console.log(`  ✨ D1 更新完了: ${syncResult.updated}/${syncResult.total} 件`);
   if (syncResult.errors && syncResult.errors.length > 0) {
-    console.error("  ❌ D1 更新エラー詳細:", JSON.stringify(syncResult.errors, null, 2));
+    // 同じエラーが全バッチ分並ぶと原因が埋もれるので、種類ごとにまとめる。
+    const byMessage = new Map<string, number>();
+    for (const error of syncResult.errors) {
+      const message = error?.message ? String(error.message) : JSON.stringify(error);
+      byMessage.set(message, (byMessage.get(message) ?? 0) + 1);
+    }
+    console.error(`  ❌ D1 更新エラー (${syncResult.errors.length} 件):`);
+    for (const [message, count] of byMessage) {
+      console.error(`     ${count} 回: ${message}`);
+    }
   }
 
+  const failed = syncResult.total - syncResult.updated;
+
   console.log(`\n========================================`);
-  console.log(
-    `✅ 再スコアリングが完了しました (対象: ${articles.length}件, 更新: ${syncResult.updated}件, 変化: ${changed}件)`,
-  );
+  if (failed > 0) {
+    // 書き込めていないのに成功として終わると、反映されたつもりで放置される。
+    // 実際に「全バッチ失敗・更新 1 件」で緑のまま完了した事故があったので、
+    // 未更新が 1 件でもあれば失敗として扱う。
+    console.error(
+      `❌ 再スコアリングは完了しましたが ${failed} 件を D1 へ反映できませんでした ` +
+        `(対象: ${articles.length}件, 更新: ${syncResult.updated}件)`,
+    );
+  } else {
+    console.log(
+      `✅ 再スコアリングが完了しました (対象: ${articles.length}件, 更新: ${syncResult.updated}件, 変化: ${changed}件)`,
+    );
+  }
   console.log(`========================================\n`);
 
   return {
     total: articles.length,
     updated: syncResult.updated,
     changed,
+    dryRun,
     ...(syncResult.errors ? { errors: syncResult.errors } : {}),
   };
 }
@@ -262,8 +286,15 @@ const isDirectExecution =
     process.argv[1].endsWith("/src/pipeline/rescore.js"));
 
 if (isDirectExecution) {
-  runRescore(parseRescoreArgs(process.argv.slice(2))).catch((err) => {
-    console.error("再スコアリング実行エラー:", err);
-    process.exit(1);
-  });
+  runRescore(parseRescoreArgs(process.argv.slice(2)))
+    .then((result) => {
+      // 未反映が残ったまま緑で終わらせない (CI が成功扱いにすると気づけない)。
+      if (result.updated < result.total && !result.dryRun) {
+        process.exitCode = 1;
+      }
+    })
+    .catch((err) => {
+      console.error("再スコアリング実行エラー:", err);
+      process.exit(1);
+    });
 }
