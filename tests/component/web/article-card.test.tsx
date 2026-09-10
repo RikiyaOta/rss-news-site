@@ -41,32 +41,29 @@ describe("ArticleCard コンポーネント", () => {
     expect(container.querySelector("p.line-clamp-2")).toBeNull();
   });
 
-  it("スコアが80点以上の場合、高スコア（グリーン系）のスタイルが適用されること", () => {
-    render(<ArticleCard article={{ ...mockArticle, score: 92 }} />);
-    const badge = screen.getByTestId("score-badge");
-    expect(badge.textContent).toContain("92");
-    expect(badge.className).toMatch(/emerald|green/);
-  });
+  /**
+   * バッジの色は src/shared/score-bands.ts の区分に従う。区分の境目でだけ
+   * 色が変わるため、各区分の上端・下端とその直前直後を表で網羅する。
+   *
+   * かつてはカード側が 80/60/40 点で色を切り替えており、スコアを付ける側
+   * (scorer) の区分 85/65/40 とずれていた。80〜84 点の記事が最上位の色で
+   * 表示されていたのはこのため。
+   */
+  it.each([
+    [100, /emerald|green/, "最上位区分の上限"],
+    [85, /emerald|green/, "最上位区分の下端"],
+    [84, /blue|sky|indigo/, "最上位区分のすぐ下 (上位区分の上端)"],
+    [65, /blue|sky|indigo/, "上位区分の下端"],
+    [64, /amber|yellow/, "上位区分のすぐ下 (中位区分の上端)"],
+    [40, /amber|yellow/, "中位区分の下端"],
+    [39, /zinc|gray|slate/, "中位区分のすぐ下 (最下位区分の上端)"],
+    [0, /zinc|gray|slate/, "最下位区分の下端"],
+  ])("スコア %s 点のバッジに %s 系の配色が適用されること (%s)", (score, expectedColor) => {
+    render(<ArticleCard article={{ ...mockArticle, score }} />);
 
-  it("スコアが60〜79点の場合、中高スコア（ブルー系）のスタイルが適用されること", () => {
-    render(<ArticleCard article={{ ...mockArticle, score: 75 }} />);
     const badge = screen.getByTestId("score-badge");
-    expect(badge.textContent).toContain("75");
-    expect(badge.className).toMatch(/blue|sky|indigo/);
-  });
-
-  it("スコアが40〜59点の場合、中スコア（イエロー/アンバー系）のスタイルが適用されること", () => {
-    render(<ArticleCard article={{ ...mockArticle, score: 50 }} />);
-    const badge = screen.getByTestId("score-badge");
-    expect(badge.textContent).toContain("50");
-    expect(badge.className).toMatch(/amber|yellow/);
-  });
-
-  it("スコアが40点未満の場合、低スコア（グレー/スレート系）のスタイルが適用されること", () => {
-    render(<ArticleCard article={{ ...mockArticle, score: 30 }} />);
-    const badge = screen.getByTestId("score-badge");
-    expect(badge.textContent).toContain("30");
-    expect(badge.className).toMatch(/zinc|gray|slate/);
+    expect(badge.textContent).toContain(String(score));
+    expect(badge.className).toMatch(expectedColor);
   });
 
   it("検索結果アイテムの場合、類似度パーセント（一致度）バッジが表示されること", () => {
