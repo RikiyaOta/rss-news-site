@@ -229,7 +229,7 @@ export async function updateArticleScores(
 
   for (let i = 0; i < targets.length; i += batchSize) {
     const chunk = targets.slice(i, i + batchSize);
-    const statements: string[] = [];
+    const valueTuples: string[] = [];
     const params: unknown[] = [];
 
     for (const target of chunk) {
@@ -239,11 +239,25 @@ export async function updateArticleScores(
         target.embedding.byteLength,
       );
       // BLOB は syncArticlesToD1 と同じく X'..' リテラルで埋め込む
-      statements.push(
-        `UPDATE articles SET score = ?, embedding = X'${uint8ArrayToHex(uint8)}' WHERE id = ?;`,
-      );
-      params.push(target.score, target.id);
+      valueTuples.push(`(?, ?, X'${uint8ArrayToHex(uint8)}')`);
+      params.push(target.id, target.score);
     }
+
+    // NOTE: 1 リクエストにつき必ず 1 ステートメントにすること。
+    // D1 は複数ステートメントと params の併用を拒否する
+    // ("The request is malformed: params with multiple statements is not supported")。
+    // 以前は `UPDATE ...;` をバッチ件数だけ改行連結して params と一緒に送っており、
+    // 端数の 1 件だけが通って残り全件が失敗していた。
+    //
+    // UPDATE ... FROM (VALUES ...) なら 1 ステートメントのまま複数行を更新できる。
+    // SQLite の VALUES 句は列名を column1, column2, ... で参照する
+    // (`AS v(id, score, ...)` の列名指定構文は SQLite にはない)。
+    const sql = `
+UPDATE articles
+SET score = v.column2, embedding = v.column3
+FROM (VALUES ${valueTuples.join(", ")}) AS v
+WHERE articles.id = v.column1;
+`.trim();
 
     try {
       const response = await fetchFn(endpoint, {
@@ -252,7 +266,7 @@ export async function updateArticleScores(
           Authorization: `Bearer ${apiToken}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ sql: statements.join("\n"), params }),
+        body: JSON.stringify({ sql, params }),
       });
 
       if (!response.ok) {

@@ -78,7 +78,7 @@ describe("既存記事の再スコアリング (src/pipeline/rescore) のテス�
 
       const result = await runRescore({ configPath: configFilePath });
 
-      expect(result).toEqual({ total: 3, updated: 3, changed: 3 });
+      expect(result).toEqual({ total: 3, updated: 3, changed: 3, dryRun: false });
 
       const targets = updateSpy.mock.calls[0][0].targets;
       expect(targets).toHaveLength(3);
@@ -139,7 +139,7 @@ describe("既存記事の再スコアリング (src/pipeline/rescore) のテス�
 
       const result = await runRescore({ configPath: configFilePath });
 
-      expect(result).toEqual({ total: 0, updated: 0, changed: 0 });
+      expect(result).toEqual({ total: 0, updated: 0, changed: 0, dryRun: false });
       expect(precomputeSpy).not.toHaveBeenCalled();
       expect(updateSpy).not.toHaveBeenCalled();
     });
@@ -172,6 +172,30 @@ describe("既存記事の再スコアリング (src/pipeline/rescore) のテス�
       expect(result.errors).toEqual([{ message: "D1 error" }]);
     });
 
+    /**
+     * 本番で「全バッチ失敗・更新 1 件」のまま成功として終わり、
+     * 反映されたつもりで放置される事故があった。呼び出し側が
+     * 未反映を判定できるよう、updated と total を必ず突き合わせられること。
+     */
+    it.each([
+      [3, 3, false, "全件反映できたら未反映なし"],
+      [3, 1, true, "一部しか反映できなければ未反映あり"],
+      [3, 0, true, "1 件も反映できなければ未反映あり"],
+    ])(
+      "対象 %s 件中 %s 件を更新したとき、未反映の有無が %s になること (%s)",
+      async (total, updated, hasUnapplied) => {
+        vi.spyOn(d1SyncModule, "fetchAllArticlesForRescore").mockResolvedValue(existingArticles);
+        vi.spyOn(scorerModule, "precomputeInterestVectors").mockResolvedValue(new Map());
+        mockScorer([78, 65, 0]);
+        vi.spyOn(d1SyncModule, "updateArticleScores").mockResolvedValue({ total, updated });
+
+        const result = await runRescore({ configPath: configFilePath });
+
+        expect(result.updated < result.total).toBe(hasUnapplied);
+        expect(result.dryRun).toBe(false);
+      },
+    );
+
     it("認証情報が設定されていない場合に例外を投げること", async () => {
       delete process.env.CLOUDFLARE_API_TOKEN;
 
@@ -194,7 +218,7 @@ describe("既存記事の再スコアリング (src/pipeline/rescore) のテス�
       const result = await runRescore({ configPath: configFilePath, dryRun: true });
 
       expect(updateSpy).not.toHaveBeenCalled();
-      expect(result).toEqual({ total: 3, updated: 0, changed: 3 });
+      expect(result).toEqual({ total: 3, updated: 0, changed: 3, dryRun: true });
     });
   });
 
