@@ -1,35 +1,11 @@
 import { useState } from "react";
 import { Article, SearchResultItem } from "../../shared/types";
+import { getScoreBand } from "../../shared/score-bands";
 import { getFaviconUrl } from "../lib/favicon";
 import { ExternalLink, Sparkles, Calendar, Tag } from "lucide-react";
 
 export interface ArticleCardProps {
   article: Article | SearchResultItem;
-}
-
-function getScoreBadgeStyle(score: number): { container: string; label: string } {
-  if (score >= 80) {
-    return {
-      container: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-      label: "高重要度",
-    };
-  }
-  if (score >= 60) {
-    return {
-      container: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
-      label: "注目",
-    };
-  }
-  if (score >= 40) {
-    return {
-      container: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
-      label: "標準",
-    };
-  }
-  return {
-    container: "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400 border-zinc-500/30",
-    label: "参考",
-  };
 }
 
 function formatPublishedDate(isoStr: string): string {
@@ -85,7 +61,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
   const isSearchResult =
     "similarity" in article && typeof (article as SearchResultItem).similarity === "number";
   const searchItem = isSearchResult ? (article as SearchResultItem) : null;
-  const scoreStyle = getScoreBadgeStyle(article.score);
+  const scoreBand = getScoreBand(article.score);
 
   return (
     <article
@@ -125,7 +101,7 @@ export function ArticleCard({ article }: ArticleCardProps) {
             {/* スコアバッジ */}
             <span
               data-testid="score-badge"
-              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${scoreStyle.container}`}
+              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${scoreBand.badgeClassName}`}
             >
               スコア: {article.score}点
             </span>
