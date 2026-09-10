@@ -76,6 +76,47 @@ describe("Header コンポーネント", () => {
     expect(screen.queryByText(/BGE-M3|Cloudflare/i)).toBeNull();
   });
 
+  describe("GitHub リポジトリへのリンク", () => {
+    it.each([["daily"], ["search"]] as const)(
+      "%s モードでも、新しいタブで開くリポジトリリンクが表示されること",
+      (mode) => {
+        render(
+          <Header
+            currentDate="2026-08-19"
+            mode={mode}
+            onPrevDay={() => {}}
+            onNextDay={() => {}}
+            onDateChange={() => {}}
+            onModeChange={() => {}}
+          />,
+        );
+
+        const link = screen.getByRole("link", { name: /GitHub/i });
+        expect(link.getAttribute("href")).toBe("https://github.com/RikiyaOta/rss-news-site");
+        expect(link.getAttribute("target")).toBe("_blank");
+        expect(link.getAttribute("rel")).toContain("noopener");
+      },
+    );
+
+    it("アイコンは装飾として扱い、リンク名は支援技術にのみ伝わること", () => {
+      render(
+        <Header
+          currentDate="2026-08-19"
+          mode="daily"
+          onPrevDay={() => {}}
+          onNextDay={() => {}}
+          onDateChange={() => {}}
+          onModeChange={() => {}}
+        />,
+      );
+
+      const link = screen.getByRole("link", { name: /GitHub/i });
+      // 画面上はアイコンのみ。テキストラベルを増やしてヘッダーの幅を圧迫しない
+      expect(link.textContent).toBe("");
+      expect(link.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    });
+  });
+
   it("検索タブは表示を「検索」と短くしつつ、支援技術には正式名称を伝えること", () => {
     render(
       <Header
