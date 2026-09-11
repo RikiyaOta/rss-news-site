@@ -54,7 +54,7 @@ describe("Header コンポーネント", () => {
     expect(nextBtn.disabled).toBe(true);
   });
 
-  it("ヘッダーにはタイトルのみが置かれ、ロゴアイコンや説明文が描画されないこと", () => {
+  it("ヘッダーにはタイトルとロゴのみが置かれ、説明文が描画されないこと", () => {
     const { container } = render(
       <Header
         currentDate="2026-08-19"
@@ -71,9 +71,28 @@ describe("Header コンポーネント", () => {
 
     // 説明文（サイトの解説テキスト）が存在しないこと
     expect(container.querySelector("header p")).toBeNull();
-    // ロゴアイコンが存在しないこと（残る svg は日付・モード操作のアイコンのみ）
-    expect(heading.querySelector("svg")).toBeNull();
     expect(screen.queryByText(/BGE-M3|Cloudflare/i)).toBeNull();
+  });
+
+  it("見出しにロゴを表示し、装飾として支援技術からは隠すこと", () => {
+    render(
+      <Header
+        currentDate="2026-08-19"
+        mode="daily"
+        onPrevDay={() => {}}
+        onNextDay={() => {}}
+        onDateChange={() => {}}
+        onModeChange={() => {}}
+      />,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    const logo = heading.querySelector("svg");
+
+    expect(logo).not.toBeNull();
+    // サイト名が隣に文字で出るため、図形自体は読み上げの対象にしない
+    expect(logo?.getAttribute("aria-hidden")).toBe("true");
+    expect(heading.textContent).toBe("RSS News for Me");
   });
 
   describe("GitHub リポジトリへのリンク", () => {
