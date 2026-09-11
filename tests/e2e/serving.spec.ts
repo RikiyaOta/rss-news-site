@@ -60,6 +60,17 @@ test.describe("Worker による配信", () => {
     expect(await res.json()).toEqual({ error: "検索クエリ 'q' は必須です" });
   });
 
+  test("ドキュメントが参照するファビコンが配信されること", async ({ page, request }) => {
+    await page.goto("/");
+
+    // 参照だけあって実体が無いと、閲覧者のブラウザが毎回 404 を引く
+    const href = await page.locator('link[rel="icon"]').getAttribute("href");
+    expect(href).toBeTruthy();
+
+    const res = await request.get(href!);
+    expect(res.status()).toBe(200);
+  });
+
   test("ブラウザのコンソールにエラーが出ていないこと", async ({ page }) => {
     const errors: string[] = [];
     page.on("console", (msg) => {
