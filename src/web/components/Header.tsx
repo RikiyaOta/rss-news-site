@@ -23,6 +23,38 @@ function GithubMark() {
   );
 }
 
+/**
+ * サイトのロゴ。
+ *
+ * ファビコン (public/favicon.svg) と同じ図形を、マークの側を型抜きした形で持つ。
+ * 抜いた部分からヘッダーの地色が透けるため、ライト・ダークのどちらでも
+ * 背景に馴染む (白で塗ると常に白いマークになり、ライトで浮く)。
+ *
+ * サイト名が隣に文字で出るので、図形自体は装飾として扱う。
+ */
+function BrandMark() {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      aria-hidden="true"
+      focusable="false"
+      className="w-6 h-6 md:w-7 md:h-7 shrink-0"
+    >
+      <defs>
+        <mask id="brand-mark-knockout">
+          <rect width="32" height="32" rx="8" fill="#fff" />
+          <g fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round">
+            <path d="M9 16 A7 7 0 0 1 16 23" />
+            <path d="M9 10 A13 13 0 0 1 22 23" />
+          </g>
+          <circle cx="9.5" cy="22.5" r="2.5" fill="#000" />
+        </mask>
+      </defs>
+      <rect width="32" height="32" rx="8" fill="#2563eb" mask="url(#brand-mark-knockout)" />
+    </svg>
+  );
+}
+
 export interface HeaderProps {
   currentDate: string;
   mode: "daily" | "search";
@@ -47,7 +79,8 @@ export function Header({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-3">
         {/* 1段目: タイトルとモード切替（モバイルでも 1 行に収まる幅に抑える） */}
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg md:text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+          <h1 className="flex items-center gap-2 text-lg md:text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+            <BrandMark />
             RSS News for Me
           </h1>
 
@@ -57,6 +90,9 @@ export function Header({
               <button
                 type="button"
                 onClick={() => onModeChange("daily")}
+                // 狭い画面ではラベルを隠すため、名前は aria-label で持たせる
+                aria-label="日別一覧"
+                aria-pressed={mode === "daily"}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
                   mode === "daily"
                     ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm font-semibold"
@@ -64,7 +100,7 @@ export function Header({
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
-                <span>日別一覧</span>
+                <span className="hidden sm:inline">日別一覧</span>
               </button>
               <button
                 type="button"
@@ -72,6 +108,7 @@ export function Header({
                 // 表示は「検索」と短くしつつ、検索実行ボタンと区別できるよう
                 // 支援技術には正式な名称を伝える
                 aria-label="セマンティック検索"
+                aria-pressed={mode === "search"}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
                   mode === "search"
                     ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm font-semibold"
@@ -79,7 +116,7 @@ export function Header({
                 }`}
               >
                 <Search className="w-3.5 h-3.5" />
-                <span>検索</span>
+                <span className="hidden sm:inline">検索</span>
               </button>
             </div>
 

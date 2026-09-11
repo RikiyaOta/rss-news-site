@@ -54,7 +54,7 @@ describe("Header コンポーネント", () => {
     expect(nextBtn.disabled).toBe(true);
   });
 
-  it("ヘッダーにはタイトルのみが置かれ、ロゴアイコンや説明文が描画されないこと", () => {
+  it("ヘッダーにはタイトルとロゴのみが置かれ、説明文が描画されないこと", () => {
     const { container } = render(
       <Header
         currentDate="2026-08-19"
@@ -71,9 +71,28 @@ describe("Header コンポーネント", () => {
 
     // 説明文（サイトの解説テキスト）が存在しないこと
     expect(container.querySelector("header p")).toBeNull();
-    // ロゴアイコンが存在しないこと（残る svg は日付・モード操作のアイコンのみ）
-    expect(heading.querySelector("svg")).toBeNull();
     expect(screen.queryByText(/BGE-M3|Cloudflare/i)).toBeNull();
+  });
+
+  it("見出しにロゴを表示し、装飾として支援技術からは隠すこと", () => {
+    render(
+      <Header
+        currentDate="2026-08-19"
+        mode="daily"
+        onPrevDay={() => {}}
+        onNextDay={() => {}}
+        onDateChange={() => {}}
+        onModeChange={() => {}}
+      />,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    const logo = heading.querySelector("svg");
+
+    expect(logo).not.toBeNull();
+    // サイト名が隣に文字で出るため、図形自体は読み上げの対象にしない
+    expect(logo?.getAttribute("aria-hidden")).toBe("true");
+    expect(heading.textContent).toBe("RSS News for Me");
   });
 
   describe("GitHub リポジトリへのリンク", () => {
@@ -114,6 +133,58 @@ describe("Header コンポーネント", () => {
       // 画面上はアイコンのみ。テキストラベルを増やしてヘッダーの幅を圧迫しない
       expect(link.textContent).toBe("");
       expect(link.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    });
+  });
+
+  describe("モード切替タブ", () => {
+    it.each([
+      { mode: "daily", selected: "日別一覧", unselected: "セマンティック検索" },
+      { mode: "search", selected: "セマンティック検索", unselected: "日別一覧" },
+    ] as const)(
+      "$mode モードでは $selected のタブだけが選択状態として伝わること",
+      ({ mode, selected, unselected }) => {
+        render(
+          <Header
+            currentDate="2026-08-19"
+            mode={mode}
+            onPrevDay={() => {}}
+            onNextDay={() => {}}
+            onDateChange={() => {}}
+            onModeChange={() => {}}
+          />,
+        );
+
+        // 選択中かどうかは背景色でしか表していないため、支援技術へは
+        // aria-pressed で伝える (ラベルを隠す狭い画面では特に手がかりが無くなる)
+        expect(screen.getByRole("button", { name: selected }).getAttribute("aria-pressed")).toBe(
+          "true",
+        );
+        expect(screen.getByRole("button", { name: unselected }).getAttribute("aria-pressed")).toBe(
+          "false",
+        );
+      },
+    );
+
+    it("ラベルを隠す狭い画面でも名前が伝わるよう、両タブが aria-label を持つこと", () => {
+      render(
+        <Header
+          currentDate="2026-08-19"
+          mode="daily"
+          onPrevDay={() => {}}
+          onNextDay={() => {}}
+          onDateChange={() => {}}
+          onModeChange={() => {}}
+        />,
+      );
+
+      // sm 未満ではラベルの span が display:none になり、可視テキストから
+      // 名前を取れなくなる。aria-label が無いと名前の無いボタンになる。
+      expect(screen.getByRole("button", { name: "日別一覧" }).getAttribute("aria-label")).toBe(
+        "日別一覧",
+      );
+      expect(
+        screen.getByRole("button", { name: "セマンティック検索" }).getAttribute("aria-label"),
+      ).toBe("セマンティック検索");
     });
   });
 

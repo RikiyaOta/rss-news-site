@@ -2,6 +2,13 @@
 
 @layer base {
   html {
+    /*
+     * 配色は prefers-color-scheme にのみ追従する (切り替え UI は持たない)。
+     * これを宣言しないと UA は常にライト前提でネイティブ UI を描くため、
+     * ダークでも日付ピッカーだけが白いまま浮いてしまう。
+     */
+    color-scheme: light dark;
+
     font-family:
       system-ui,
       -apple-system,
