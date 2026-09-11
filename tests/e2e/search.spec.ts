@@ -65,11 +65,15 @@ test.describe("セマンティック検索", () => {
   test("一致度は降順に並ぶこと", async ({ page }) => {
     await search(page, "TypeScript");
 
-    const badges = await page
-      .getByTestId("search-view")
-      .getByTestId("similarity-badge")
-      .allTextContents();
-    const values = badges.map((text) => Number(text.replace(/[^\d]/g, "")));
+    const badges = page.getByTestId("search-view").getByTestId("similarity-badge");
+
+    // 検索中はスピナーだけが描かれ、結果は DOM に存在しない。allTextContents は
+    // 自動待機しない一度きりの読み取りなので、描画を待たずに呼ぶと 0 件を拾う。
+    await expect(badges.first()).toBeVisible();
+
+    const values = (await badges.allTextContents()).map((text) =>
+      Number(text.replace(/[^\d]/g, "")),
+    );
 
     expect(values.length).toBeGreaterThan(1);
     expect(values).toEqual([...values].sort((a, b) => b - a));
