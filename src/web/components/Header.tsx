@@ -90,6 +90,9 @@ export function Header({
               <button
                 type="button"
                 onClick={() => onModeChange("daily")}
+                // 狭い画面ではラベルを隠すため、名前は aria-label で持たせる
+                aria-label="日別一覧"
+                aria-pressed={mode === "daily"}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
                   mode === "daily"
                     ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm font-semibold"
@@ -97,7 +100,7 @@ export function Header({
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
-                <span>日別一覧</span>
+                <span className="hidden sm:inline">日別一覧</span>
               </button>
               <button
                 type="button"
@@ -105,6 +108,7 @@ export function Header({
                 // 表示は「検索」と短くしつつ、検索実行ボタンと区別できるよう
                 // 支援技術には正式な名称を伝える
                 aria-label="セマンティック検索"
+                aria-pressed={mode === "search"}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
                   mode === "search"
                     ? "bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 shadow-sm font-semibold"
@@ -112,7 +116,7 @@ export function Header({
                 }`}
               >
                 <Search className="w-3.5 h-3.5" />
-                <span>検索</span>
+                <span className="hidden sm:inline">検索</span>
               </button>
             </div>
 

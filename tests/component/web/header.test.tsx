@@ -136,6 +136,58 @@ describe("Header コンポーネント", () => {
     });
   });
 
+  describe("モード切替タブ", () => {
+    it.each([
+      { mode: "daily", selected: "日別一覧", unselected: "セマンティック検索" },
+      { mode: "search", selected: "セマンティック検索", unselected: "日別一覧" },
+    ] as const)(
+      "$mode モードでは $selected のタブだけが選択状態として伝わること",
+      ({ mode, selected, unselected }) => {
+        render(
+          <Header
+            currentDate="2026-08-19"
+            mode={mode}
+            onPrevDay={() => {}}
+            onNextDay={() => {}}
+            onDateChange={() => {}}
+            onModeChange={() => {}}
+          />,
+        );
+
+        // 選択中かどうかは背景色でしか表していないため、支援技術へは
+        // aria-pressed で伝える (ラベルを隠す狭い画面では特に手がかりが無くなる)
+        expect(screen.getByRole("button", { name: selected }).getAttribute("aria-pressed")).toBe(
+          "true",
+        );
+        expect(screen.getByRole("button", { name: unselected }).getAttribute("aria-pressed")).toBe(
+          "false",
+        );
+      },
+    );
+
+    it("ラベルを隠す狭い画面でも名前が伝わるよう、両タブが aria-label を持つこと", () => {
+      render(
+        <Header
+          currentDate="2026-08-19"
+          mode="daily"
+          onPrevDay={() => {}}
+          onNextDay={() => {}}
+          onDateChange={() => {}}
+          onModeChange={() => {}}
+        />,
+      );
+
+      // sm 未満ではラベルの span が display:none になり、可視テキストから
+      // 名前を取れなくなる。aria-label が無いと名前の無いボタンになる。
+      expect(screen.getByRole("button", { name: "日別一覧" }).getAttribute("aria-label")).toBe(
+        "日別一覧",
+      );
+      expect(
+        screen.getByRole("button", { name: "セマンティック検索" }).getAttribute("aria-label"),
+      ).toBe("セマンティック検索");
+    });
+  });
+
   it("検索タブは表示を「検索」と短くしつつ、支援技術には正式名称を伝えること", () => {
     render(
       <Header
