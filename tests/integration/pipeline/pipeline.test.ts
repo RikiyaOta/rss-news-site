@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import * as yaml from "js-yaml";
-import { runPipeline, PipelineOptions } from "../../../src/pipeline/index";
+import { runPipeline, countUnsyncedArticles, PipelineOptions } from "../../../src/pipeline/index";
 import * as d1SyncModule from "../../../src/pipeline/d1-sync";
 import * as fetcherModule from "../../../src/pipeline/fetcher";
 import * as scorerModule from "../../../src/pipeline/scorer";
@@ -459,6 +459,116 @@ describe("パイプライン統合実行スクリプト (src/pipeline/index) の
         articles: expect.any(Array),
         customFetch,
       });
+    });
+  });
+
+  describe("D1 同期の失敗判定", () => {
+    /** RSS 取得とスコアリングをスタブし、D1 同期の結果だけを差し替えて走らせる */
+    async function runWithSyncResult(syncResult: {
+      total: number;
+      inserted: number;
+      errors?: any[];
+    }) {
+      vi.spyOn(d1SyncModule, "ensureD1Schema").mockResolvedValue(undefined as any);
+      vi.spyOn(d1SyncModule, "syncArticlesToD1").mockResolvedValue(syncResult);
+      vi.spyOn(fetcherModule, "fetchFeedArticles").mockImplementation(async (source) => {
+        if (source.name === "Tech Feed 1") return [sampleRawArticles[0], sampleRawArticles[2]];
+        return [sampleRawArticles[1]];
+      });
+      vi.spyOn(scorerModule, "precomputeInterestVectors").mockResolvedValue(new Map());
+      vi.spyOn(scorerModule, "scoreArticleWithProfile").mockResolvedValue({
+        score: 85,
+        maxSimilarity: 0.85,
+        matchedInterest: "TypeScript",
+        excludedBy: null,
+        articleVector: new Float32Array(1024).fill(0.05),
+      });
+
+      return runPipeline({ dateStr: "2026-08-19", configPath: configFilePath });
+    }
+
+    /**
+     * 全バッチ失敗でも終了コード 0 のまま緑で完了し、記事が D1 へ
+     * 入っていないことに気づけなかった事故がある (rescore 側は同じ判定を
+     * 持つが、本体には無かった)。未反映が 1 件でもあれば失敗として
+     * 扱えることを表で固定する。
+     */
+    it.each([
+      [3, 3, 0, "全件反映できたら未反映なし"],
+      [3, 2, 1, "1 件だけ落ちたら未反映 1 件"],
+      [3, 1, 2, "一部しか反映できなければ残りが未反映"],
+      [3, 0, 3, "1 件も反映できなければ全件が未反映"],
+      [1, 0, 1, "1 件だけの同期に失敗したら未反映 1 件"],
+      [0, 0, 0, "同期対象が 0 件なら未反映なし"],
+    ])(
+      "対象 %s 件中 %s 件を同期したとき、未反映が %s 件と判定されること (%s)",
+      (total, inserted, expected) => {
+        const unsynced = countUnsyncedArticles({
+          date: "2026-08-19",
+          processedCount: total,
+          skippedCount: 0,
+          totalFetched: total,
+          articles: [],
+          d1SyncResult: { total, inserted },
+        });
+
+        expect(unsynced, `${total} 件中 ${inserted} 件同期`).toBe(expected);
+      },
+    );
+
+    it("D1 同期を行わなかった場合は未反映なしと判定されること", () => {
+      const unsynced = countUnsyncedArticles({
+        date: "2026-08-19",
+        processedCount: 3,
+        skippedCount: 0,
+        totalFetched: 3,
+        articles: [],
+      });
+
+      expect(unsynced).toBe(0);
+    });
+
+    it("D1 へ 1 件も反映できなかったとき、正常完了として報告しないこと", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      const result = await runWithSyncResult({
+        total: 3,
+        inserted: 0,
+        errors: [{ message: "params with multiple statements is not supported" }],
+      });
+
+      expect(countUnsyncedArticles(result)).toBe(3);
+      expect(logSpy.mock.calls.flat().join("\n")).not.toContain("正常に完了");
+      expect(errorSpy.mock.calls.flat().join("\n")).toContain("3 件");
+    });
+
+    it("全件を反映できたときは正常完了として報告すること", async () => {
+      const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      const result = await runWithSyncResult({ total: 3, inserted: 3 });
+
+      expect(countUnsyncedArticles(result)).toBe(0);
+      expect(logSpy.mock.calls.flat().join("\n")).toContain("正常に完了");
+    });
+
+    it("同じ原因のエラーが全バッチ分並ばず、種別ごとに集計されて出力されること", async () => {
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await runWithSyncResult({
+        total: 3,
+        inserted: 0,
+        errors: [
+          { message: "params with multiple statements is not supported" },
+          { message: "params with multiple statements is not supported" },
+          { message: "D1_ERROR: no such column" },
+        ],
+      });
+
+      const output = errorSpy.mock.calls.flat().join("\n");
+      expect(output).toContain("2 回: params with multiple statements is not supported");
+      expect(output).toContain("1 回: D1_ERROR: no such column");
     });
   });
 

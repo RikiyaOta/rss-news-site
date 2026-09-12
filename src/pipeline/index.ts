@@ -206,17 +206,20 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
 
     console.log(`  ✨ D1 同期完了: ${d1SyncResult.inserted}/${d1SyncResult.total} 件 挿入・更新`);
     if (d1SyncResult.errors && d1SyncResult.errors.length > 0) {
-      console.error("  ❌ D1 同期エラー詳細:", JSON.stringify(d1SyncResult.errors, null, 2));
+      // 同じエラーが全バッチ分並ぶと原因が埋もれるので、種類ごとにまとめる。
+      const byMessage = new Map<string, number>();
+      for (const error of d1SyncResult.errors) {
+        const message = error?.message ? String(error.message) : JSON.stringify(error);
+        byMessage.set(message, (byMessage.get(message) ?? 0) + 1);
+      }
+      console.error(`  ❌ D1 同期エラー (${d1SyncResult.errors.length} 件):`);
+      for (const [message, count] of byMessage) {
+        console.error(`     ${count} 回: ${message}`);
+      }
     }
   }
 
-  console.log(`\n========================================`);
-  console.log(
-    `✅ パイプラインが正常に完了しました (処理: ${processedArticles.length}件, スキップ: ${totalSkipped}件, 日付: ${dateStr})`,
-  );
-  console.log(`========================================\n`);
-
-  return {
+  const result: PipelineResult = {
     date: dateStr,
     processedCount: processedArticles.length,
     skippedCount: totalSkipped,
@@ -224,6 +227,39 @@ export async function runPipeline(options: PipelineOptions = {}): Promise<Pipeli
     articles: processedArticles,
     d1SyncResult,
   };
+
+  const unsynced = countUnsyncedArticles(result);
+
+  console.log(`\n========================================`);
+  if (unsynced > 0) {
+    // 書き込めていないのに成功として終わると、記事が入ったつもりで放置される。
+    // 実際に全バッチ失敗のまま緑で完了した事故があったため、
+    // 未反映が 1 件でもあれば失敗として扱う。
+    console.error(
+      `❌ パイプラインは完了しましたが ${unsynced} 件を D1 へ反映できませんでした ` +
+        `(処理: ${processedArticles.length}件, 同期: ${d1SyncResult?.inserted ?? 0}件, 日付: ${dateStr})`,
+    );
+  } else {
+    console.log(
+      `✅ パイプラインが正常に完了しました (処理: ${processedArticles.length}件, スキップ: ${totalSkipped}件, 日付: ${dateStr})`,
+    );
+  }
+  console.log(`========================================\n`);
+
+  return result;
+}
+
+/**
+ * D1 へ反映できなかった記事の件数を返す。
+ *
+ * D1 同期を行わなかった場合 (skipD1Sync、認証情報なし、対象 0 件) は
+ * 未反映なしとみなす。判定を 1 箇所に閉じ込めて CLI の終了コードと
+ * 完了ログが食い違わないようにする。
+ */
+export function countUnsyncedArticles(result: PipelineResult): number {
+  const sync = result.d1SyncResult;
+  if (!sync) return 0;
+  return sync.total - sync.inserted;
 }
 
 // CLI エントリーポイント
@@ -234,8 +270,16 @@ const isDirectExecution =
     process.argv[1].endsWith("/src/pipeline/index.js"));
 
 if (isDirectExecution) {
-  runPipeline().catch((err) => {
-    console.error("パイプライン実行エラー:", err);
-    process.exit(1);
-  });
+  runPipeline()
+    .then((result) => {
+      // 未反映が残ったまま緑で終わらせない (CI が成功扱いにすると、
+      // 記事の収集が止まっていることに気づけない)。
+      if (countUnsyncedArticles(result) > 0) {
+        process.exitCode = 1;
+      }
+    })
+    .catch((err) => {
+      console.error("パイプライン実行エラー:", err);
+      process.exit(1);
+    });
 }
