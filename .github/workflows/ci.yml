@@ -7,12 +7,21 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# このワークフローのジョブ ID (check / e2e) は、そのまま main の
+# required status check の名前として参照されている。
+#
+# ジョブに `name:` を付けると、GitHub が報告するチェック名は ID ではなく
+# `name:` の値になり、ルールセットが「存在しないチェック」を待ち続けて
+# すべての PR がマージ不能になる。実際に一度そうなった。
+#
+# したがって:
+#   - これらのジョブに `name:` を付けないこと
+#   - ジョブ ID を変えるときは、main のルールセットも併せて更新すること
 jobs:
   # 静的チェックと L1〜L3 のテスト。E2E と独立しているため並列に走らせる。
   # Playwright のブラウザ取得 (約 23 秒) がこちらの経路に乗らないので、
   # 型エラーやリントの失敗はブラウザの準備を待たずに分かる。
   check:
-    name: 静的チェックとテスト (L1-L3)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -140,7 +149,6 @@ jobs:
   # 5 倍にしても 11 秒しか増えない。一方で「原因の PR ではなく翌朝の main で
   # 落ちる」コストは実際に発生していた (PR #55)。全シナリオを PR で回す。
   e2e:
-    name: E2E (L4)
     runs-on: ubuntu-latest
     steps:
       - name: リポジトリのチェックアウト
