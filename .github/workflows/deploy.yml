@@ -62,3 +62,13 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm exec wrangler deploy
+
+      # wrangler deploy の成功は「アップロードできた」ことしか示さない。
+      # カスタムドメインのルーティング・実 Workers AI・リモート適用済みの
+      # 実 D1・エッジからのアセット配信は、どのテスト層も通っていない経路
+      # なので、配信後に実物を叩いて確かめる。
+      #
+      # ここが落ちてもデプロイは巻き戻らない。赤くすることが目的で、
+      # 本番が壊れたまま緑で終わらないようにしている。
+      - name: デプロイ後の本番検証
+        run: pnpm exec tsx scripts/verify-deployment.ts https://rss-news.rikiyaota.kyoto

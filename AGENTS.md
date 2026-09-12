@@ -38,8 +38,22 @@
 | L4 E2E | `tests/e2e/**` | `pnpm test:e2e` | Workers AI のみ |
 
 * **L4 E2E で API をモックしてはいけません。** `wrangler dev` が本番と同じ workerd 上で Hono を起動し、D1（ローカル SQLite に本番と同じ migrations を適用）と `pnpm build` の生成物を配信します。
-* **Workers AI だけは例外**です。ローカルでエミュレートできず、呼び出すと実アカウントへリクエストが飛んで課金対象になるため、`tests/e2e/worker-entry.ts` で決定論的なスタブに差し替えます。実モデルの精度は L3 (Model) と nightly で担保します。
+* **Workers AI だけは例外**です。ローカルでエミュレートできず、呼び出すと実アカウントへリクエストが飛んで課金対象になるため、`tests/e2e/worker-entry.ts` で決定論的なスタブに差し替えます。実モデルの精度は L3 (Model) で担保します。
 * **同じ振る舞いを 2 層で重複検証しないでください。** 上位層は「経路が繋がっていること」だけを確認します。
+
+### 2.2.1 CI での実行
+
+* **L1〜L4 はすべて毎 PR で実行します。** `ci.yml` の `check` ジョブ（静的チェック + L1/L2/L3）と `e2e` ジョブ（L4 全シナリオ）が並列に走ります。
+* **E2E を smoke だけに絞らないでください。** 実測でセットアップ（ビルド・シード・`wrangler dev` 起動）が大半を占めており、全 30 ケースを回しても @smoke の 6 ケースとの差は約 11 秒です。絞ると、失敗が原因の PR から切り離されて別途調査が必要になるコストの方が大きくなります（実際に発生しました）。
+* L3 (Model) だけは `embedding-model-smoke-test.yml` で paths 条件付きの別ワークフローにしています。実行のたびに約 1.1GB を Hugging Face から取得するため、毎 PR にすると全 PR の合否が外部 CDN の可用性に依存します。**このワークフローを required check にしないでください。** paths でスキップされたワークフローはステータスを報告せず、チェックが pending のまま残ります。
+
+### 2.2.2 デプロイ後の本番検証
+
+`scripts/verify-deployment.ts` が `deploy.yml` の `wrangler deploy` 直後に実行されます。テストではなく、本番にしか存在しない経路の確認です。
+
+* 対象は **カスタムドメインのルーティング**・**実 Workers AI (`@cf/baai/bge-m3`)**・**リモート適用済みの実 D1**・**エッジからのアセット配信**。いずれもテスト層では検証できません（E2E は `127.0.0.1` を叩き、`wrangler.e2e.jsonc` は `routes` を持たず、Workers AI は全層でスタブです）。
+* **コード起因でしか落ちないものだけを検証してください。** 記事の件数は見ません。0 件の日は正常にありえます。自分のせいでない赤が続くと、赤に対する感度が失われます。
+* **データの鮮度は外形監視で見ないでください。** 収集が止まったかどうかはパイプライン自身が未反映件数で判定します（`countUnsyncedArticles`）。外から件数を覗いても「なぜ 0 件なのか」を切り分けられません。
 
 ### 2.3 スキーマとカバレッジ
 
@@ -61,7 +75,7 @@ pnpm test:coverage     # 上記 + カバレッジ計測
 pnpm test:worker       # L3(Worker): workerd + ローカル D1
 pnpm test:integration  # L3(Model): 実モデル (約1.1GB のダウンロードを伴う)
 pnpm test:e2e          # L4: wrangler dev + ローカル D1 + 本番ビルド
-pnpm test:e2e:smoke    # L4 のうち @smoke タグのみ
+pnpm test:e2e:smoke    # L4 のうち @smoke タグのみ (手元での素早い確認用。CI は常に全シナリオ)
 pnpm typecheck         # tsc --noEmit
 pnpm check             # 型・リント・整形・Terraform・pinact・L1〜L3
 ```
