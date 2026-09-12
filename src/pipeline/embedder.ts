@@ -63,7 +63,7 @@ export function l2Normalize(vector: Float32Array | number[]): Float32Array {
  * グラフ最適化（SimplifiedLayerNormFusion とキャスト挿入の組み合わせ）が
  * 失敗してセッション初期化ごと例外になるため、@huggingface/transformers は
  * onnxruntime-node 1.21.0 を伴う 3.8.1 に固定している
- * （.github/dependabot.yml で自動更新も除外済み）。
+ * （renovate.json の packageRules で自動更新も除外済み）。
  */
 export async function getExtractor(customPipeline?: any): Promise<any> {
   if (customPipeline) {

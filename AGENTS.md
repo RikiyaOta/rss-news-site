@@ -14,6 +14,16 @@
 * **サプライチェーンセキュリティ:**
   * `pnpm-workspace.yaml` に `minimumReleaseAge: 10080`（7日間）が設定されています。最新リリースから7日未満のパッケージはインストールできません。
 
+### 1.1 依存更新 (Renovate)
+
+依存更新は **Renovate**（`renovate.json`）が担います。Dependabot の version updates は廃止しました（Dependabot alerts は設定ファイル不要の別機能なので引き続き有効です）。
+
+* **7 日の待機は 3 箇所で揃えてください。** `pnpm-workspace.yaml` の `minimumReleaseAge: 10080`、`mise.toml` の `minimum_release_age = "7d"`、`renovate.json` の `minimumReleaseAge: "7 days"` は同じ意図の設定です。Renovate 側だけ短くすると、`pnpm-workspace.yaml` の `minimumReleaseAgeStrict: true` によってロックファイル更新が拒否され、PR が作れません。
+* **自動マージするのは npm の patch だけです。** `main` の required status check（`check` / `e2e`）が緑になるまで GitHub 本体の auto-merge が待つため、テストが唯一のゲートになります。依存更新の PR は `package.json` / `pnpm-lock.yaml` を変更するので、`embedding-model-smoke-test.yml` の paths 条件にも該当し、実モデルの読み込みテストが併せて走ります。
+* **Terraform を自動マージ対象に加えないでください。** `main` へのマージは `deploy.yml` の `terraform apply -auto-approve` を起動します。plan を誰も読まないまま本番インフラへ適用されることになり、npm のパッチとは危険度のカテゴリが異なります。
+* **`separateMinorPatch: true` を外さないでください。** Renovate は既定で patch を minor の PR に含めるため、これを外すとパッチ限定の自動マージルールが黙って機能しなくなります。
+* 設定を変更したら `pnpm dlx --package renovate renovate-config-validator` で検証してください（リポジトリ設定として検証させるため、`renovate.json` があるディレクトリで引数なしで実行します）。
+
 ---
 
 ## 2. テスト規約 & 品質基準

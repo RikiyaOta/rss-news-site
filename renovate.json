@@ -1,0 +1,51 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":dependencyDashboard"],
+  "timezone": "Asia/Tokyo",
+  "schedule": ["* 9-12 * * 1"],
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "separateMinorPatch": true,
+  "platformAutomerge": true,
+  "prConcurrentLimit": 10,
+  "packageRules": [
+    {
+      "description": "@huggingface/transformers 4.x は onnxruntime-node 1.24.3 を厳密固定しており、Xenova/bge-m3 の fp16 モデルを読み込む際に ONNX Runtime のグラフ最適化が失敗する (SimplifiedLayerNormFusion + キャスト挿入の不整合)。記事収集パイプラインが起動時に必ず落ちるため 3.8.1 に固定する。ONNX Runtime 側の修正を確認できたら、このルールを外して追随する。",
+      "matchPackageNames": ["@huggingface/transformers"],
+      "enabled": false
+    },
+    {
+      "description": "npm のパッチ更新のみ自動マージする。main は check / e2e を required status check にしており、platformAutomerge は GitHub 本体の auto-merge を使うためこの 2 つが緑になるまでマージされない。依存更新の PR は package.json / pnpm-lock.yaml を変更するため、embedding-model-smoke-test.yml の paths 条件に該当し、実モデル (bge-m3) の読み込みテストも併せて走る。",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "npm patch updates",
+      "automerge": true
+    },
+    {
+      "description": "npm の minor は 1 つの PR にまとめるが自動マージはしない。破壊的変更がパッチに紛れて発見が遅れる事故を避けるため、major は config:recommended の :separateMajorReleases により単独 PR になる。",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor"],
+      "groupName": "npm minor updates"
+    },
+    {
+      "description": "Terraform は自動マージしない。main へのマージは deploy.yml の terraform apply -auto-approve を起動するため、plan を誰も読まないまま本番インフラへ適用されることになる。npm のパッチとは危険度のカテゴリが異なる。",
+      "matchManagers": ["terraform"],
+      "automerge": false
+    },
+    {
+      "description": "GitHub Actions は自動マージしない。SHA 固定は pinact:check が検証するが、キャッシュや artifact の挙動変化のようにテストが落ちない形の劣化は CI では捕まえられない。",
+      "matchManagers": ["github-actions"],
+      "automerge": false
+    },
+    {
+      "description": "mise の管理ツール (node / pnpm / terraform / tflint / pinact) は自動マージしない。Renovate の mise マネージャは mise.toml を更新したあと mise lock を実行して mise.lock を追随させようとするが、これは実行環境の制約 (allowedUnsafeExecutions への mise の登録、または mise 側の safe mode 対応) に依存する。追随しなかった場合 mise.toml と mise.lock が食い違った PR になるため、実際の挙動を観測できるまでは手動で確認する。",
+      "matchManagers": ["mise"],
+      "automerge": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "description": "脆弱性修正は 7 日の待機を適用せず、すぐに PR を作る。ただし自動マージはせず内容を確認する。",
+    "minimumReleaseAge": null,
+    "automerge": false
+  }
+}
