@@ -54,6 +54,30 @@ test.describe("日別記事一覧", () => {
     await expect(link).toHaveAttribute("target", "_blank");
   });
 
+  test("記事カードのどこを押しても記事が開くこと", async ({ page, context }) => {
+    // 外部サイトへは実際に出ず、遷移先の URL だけを確認する
+    await context.route("https://example.com/**", (route) =>
+      route.fulfill({ contentType: "text/html", body: "<html><body>stub</body></html>" }),
+    );
+
+    await page.goto("/");
+
+    const top = TODAY_ARTICLES.reduce((a, b) => (a.score >= b.score ? a : b));
+    const card = page.getByTestId("article-card").first();
+    await expect(card.getByRole("heading", { name: top.title })).toBeVisible();
+
+    const box = (await card.boundingBox())!;
+
+    // タイトルから離れたカード下部 (公開日時の行) を押しても記事が開く
+    const [opened] = await Promise.all([
+      context.waitForEvent("page"),
+      page.mouse.click(box.x + box.width / 2, box.y + box.height - 8),
+    ]);
+    await opened.waitForLoadState();
+
+    expect(opened.url()).toBe(top.url);
+  });
+
   test("前日・翌日ボタンで日付が移動し、該当日の記事が表示されること", async ({ page }) => {
     await page.goto("/");
 
