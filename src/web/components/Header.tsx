@@ -159,7 +159,7 @@ export function Header({
               type="button"
               onClick={onNextDay}
               disabled={isNextDisabled}
-              className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              className="p-1.5 rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 disabled:opacity-30 transition-colors"
               aria-label="翌日"
               title="翌日"
             >
