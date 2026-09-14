@@ -1,6 +1,28 @@
 @import "tailwindcss";
 
 @layer base {
+  /*
+   * 押せる要素にはカーソルで押せることを示す。
+   *
+   * Tailwind v4 の preflight はボタンのカーソルを UA 既定 (`default`) へ戻すため、
+   * 指定しないとボタンだけがリンクと違い「押せる感じ」を返さない。
+   * 個々のボタンに `cursor-pointer` を書くと付け忘れが必ず出るので、ここで一括して与える。
+   *
+   * 日付ピッカーは入力欄の見た目ながらクリックでカレンダーが開くため同じ扱いにする。
+   */
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  input[type="date"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* 押せないものは押せないと分かる形にする */
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  input[type="date"]:disabled {
+    cursor: not-allowed;
+  }
+
   html {
     /*
      * 配色は prefers-color-scheme にのみ追従する (切り替え UI は持たない)。
