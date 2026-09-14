@@ -110,11 +110,17 @@ export function ArticleCard({ article }: ArticleCardProps) {
 
         {/* 記事タイトル */}
         <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 leading-snug mb-2">
+          {/*
+            カード全体をこのリンクの当たり判定にする (stretched link)。
+            カードは hover で持ち上がる見た目なのに押せるのはタイトルだけ、という
+            ずれを無くすため、擬似要素をカード全面へ広げて覆う。
+            リンクを増やさないので、読み上げ・タブ移動の順序は変わらない。
+          */}
           <a
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="group-hover:text-blue-600 dark:group-hover:text-blue-400 inline-flex items-start gap-1.5 transition-colors"
+            className="group-hover:text-blue-600 dark:group-hover:text-blue-400 inline-flex items-start gap-1.5 transition-colors after:absolute after:inset-0 after:rounded-xl"
           >
             <span>{article.title}</span>
             <ExternalLink className="w-4 h-4 mt-0.5 flex-shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
