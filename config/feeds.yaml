@@ -145,6 +145,8 @@ feeds:
     url: "https://read.thecoder.cafe/feed?sectionId=206570"
   - name: "The GitHub Blog"
     url: "https://github.blog/feed/"
+  - name: "This Week in Rust"
+    url: "https://this-week-in-rust.org/rss.xml"
   - name: "Timee Product Team Blog"
     url: "https://tech.timee.co.jp/rss"
   - name: "TVer Tech Blog"
