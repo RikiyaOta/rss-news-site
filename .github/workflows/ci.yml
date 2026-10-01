@@ -148,8 +148,13 @@ jobs:
   # 大半はビルド・シード・wrangler 起動に費やされており、ケース数を
   # 5 倍にしても 11 秒しか増えない。一方で「原因の PR ではなく翌朝の main で
   # 落ちる」コストは実際に発生していた (PR #55)。全シナリオを PR で回す。
+  #
+  # 通常は 2 分弱で終わる。webServer が終了できずに Playwright が止まると、
+  # 既定の 6 時間まで何も出力せずに待ち続けるため、上限を設けて早く落とす
+  # (pnpm 11.27.1 で実際に発生した。PR #67)。
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: リポジトリのチェックアウト
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
