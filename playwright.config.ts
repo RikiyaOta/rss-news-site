@@ -45,5 +45,11 @@ export default defineConfig({
     timeout: 120 * 1000,
     stdout: "pipe",
     stderr: "pipe",
+    // 既定の終了方法はプロセスグループへの SIGKILL だが、pnpm 11.27.1 以降は
+    // スクリプトを別のプロセスグループで起動するため、SIGKILL が wrangler dev まで
+    // 届かない。残った wrangler が stdout のパイプを握り続け、全テスト完了後も
+    // Playwright が終了せず CI がタイムアウトまで止まっていた (PR #67)。
+    // SIGTERM なら pnpm が子プロセスへ転送するので、まずそれで止める。
+    gracefulShutdown: { signal: "SIGTERM", timeout: 10 * 1000 },
   },
 });
