@@ -14,15 +14,14 @@
 * **サプライチェーンセキュリティ:**
   * `pnpm-workspace.yaml` に `minimumReleaseAge: 10080`（7日間）が設定されています。最新リリースから7日未満のパッケージはインストールできません。
 
-### 1.1 依存更新 (Renovate)
+### 1.1 依存更新 (Renovate は停止中)
 
-依存更新は **Renovate**（`renovate.json`）が担います。Dependabot の version updates は廃止しました（Dependabot alerts は設定ファイル不要の別機能なので引き続き有効です）。
+Renovate は `renovate.json` の `"enabled": false` で **停止しています**。依存更新はオーナーが気づいたときに手動で行います（Dependabot alerts は設定ファイル不要の別機能なので引き続き有効です）。設定内容は再開時のために残してあります。
 
-* **7 日の待機は 3 箇所で揃えてください。** `pnpm-workspace.yaml` の `minimumReleaseAge: 10080`、`mise.toml` の `minimum_release_age = "7d"`、`renovate.json` の `minimumReleaseAge: "7 days"` は同じ意図の設定です。Renovate 側だけ短くすると、`pnpm-workspace.yaml` の `minimumReleaseAgeStrict: true` によってロックファイル更新が拒否され、PR が作れません。
-* **自動マージするのは npm の patch だけです。** `main` の required status check（`check` / `e2e`）が緑になるまで GitHub 本体の auto-merge が待つため、テストが唯一のゲートになります。依存更新の PR は `package.json` / `pnpm-lock.yaml` を変更するので、`embedding-model-smoke-test.yml` の paths 条件にも該当し、実モデルの読み込みテストが併せて走ります。
-* **Terraform を自動マージ対象に加えないでください。** `main` へのマージは `deploy.yml` の `terraform apply -auto-approve` を起動します。plan を誰も読まないまま本番インフラへ適用されることになり、npm のパッチとは危険度のカテゴリが異なります。
-* **`separateMinorPatch: true` を外さないでください。** Renovate は既定で patch を minor の PR に含めるため、これを外すとパッチ限定の自動マージルールが黙って機能しなくなります。
-* 設定を変更したら `pnpm dlx --package renovate renovate-config-validator` で検証してください（リポジトリ設定として検証させるため、`renovate.json` があるディレクトリで引数なしで実行します）。
+* **手動更新でも 7 日の待機は守られます。** `pnpm-workspace.yaml` の `minimumReleaseAge: 10080`（`minimumReleaseAgeStrict: true`）と `mise.toml` の `minimum_release_age = "7d"` により、リリースから 7 日未満のバージョンはインストールできません。
+* **`@huggingface/transformers` は 3.8.1 から上げないでください。** 理由は `src/pipeline/embedder.ts` の `getExtractor` のコメントを参照してください。
+* **vitest 本体と `@cloudflare/vitest-pool-workers` は同時に更新してください。** pool-workers は peerDependencies で vitest のメジャーを固定しており、片方だけ上げると L3 (Worker) が起動できません。
+* Renovate を再開するときは `"enabled": false` を外し、`pnpm dlx --package renovate renovate-config-validator` で検証してください（`renovate.json` があるディレクトリで引数なしで実行します）。
 
 ---
 
