@@ -127,7 +127,9 @@ pnpm check             # 型・リント・整形・Terraform・pinact・L1〜L3
 4. **Cloudflare Workers & Hono API:**
    * Cloudflare Workers（Static Assets + Hono）によるエッジ API / フロントエンド配信。
    * `/api/articles?date=YYYY-MM-DD`: `published_date_jst` 基準の日別記事一覧（スコア降順）。
-   * `/api/search?q=...`: Workers AI (`@cf/baai/bge-m3`) によるクエリベクトル化と D1 全記事ベクトル類似度検索。
+   * `/api/search?q=...`: Workers AI (`@cf/baai/bge-m3`) によるクエリベクトル化と D1 記事ベクトルとの類似度検索。
+     * **検索対象は直近 30 日（`SEARCH_WINDOW_DAYS`）かつ最大 4,000 件（`SEARCH_MAX_SCAN`）に限定しています。** 類似度は Worker 内で総当たり計算するため、読み込む記事数に比例して CPU とメモリを使います。全期間を対象にしていたときは、約 7,400 件で Workers 無料プランの上限を超え、検索が 503（Error 1102）になりました。どちらかの上限を引き上げるときは、本番で検索が通ることを確認してください。
+     * Cloudflare Vectorize への移行も検討しましたが、無料枠に保存できるのは 500 万次元（1024 次元で約 4,880 件）までで、全記事は収まらないため見送りました。
 5. **Terraform & Wrangler 責務分離方針 (Cloudflare Best Practice):**
    * **Terraform の責務:** 永続インフラ・長寿命リソースである Cloudflare D1 データベース（`rss-news-db`）の作成とライフサイクル管理に専念（tfstate は R2 バケット `rss-news-site-tfstate` で管理）。
    * **Wrangler の責務 (`wrangler.jsonc`):** アプリケーションコード（Hono）、React SPA 静的アセット、D1 / Workers AI バインディング、カスタムドメインのルーティングを一元管理。Worker 本体を Terraform 側に重複定義しない。

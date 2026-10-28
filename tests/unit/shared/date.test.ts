@@ -4,6 +4,7 @@ import {
   computePublishedDateJst,
   getTodayJstDateString,
   adjustDateString,
+  getSearchSinceDate,
 } from "../../../src/shared/date";
 
 /**
@@ -99,6 +100,19 @@ describe("JST 日付計算 (src/shared/date)", () => {
       // UTC で計算しているため、実行環境の TZ が変わっても結果は不変
       expect(adjustDateString("2026-03-08", 1)).toBe("2026-03-09");
       expect(adjustDateString("2026-11-01", 1)).toBe("2026-11-02");
+    });
+  });
+
+  describe("getSearchSinceDate - 検索対象期間の開始日", () => {
+    it.each([
+      ["2026-10-28T03:00:00.000Z", "2026-09-29", "今日 (10/28) を含めて 30 日"],
+      ["2026-10-27T14:59:59.999Z", "2026-09-28", "JST の日付境界の直前は前日基準"],
+      ["2026-10-27T15:00:00.000Z", "2026-09-29", "JST の日付境界ちょうどで翌日基準"],
+      ["2026-01-15T03:00:00.000Z", "2025-12-17", "年跨ぎ"],
+      ["2024-03-01T03:00:00.000Z", "2024-02-01", "うるう年 (2 月が 29 日)"],
+      ["2026-03-01T03:00:00.000Z", "2026-01-31", "平年 (2 月が 28 日)"],
+    ])("現在時刻が %s のとき開始日は %s であること (%s)", (now, expected) => {
+      expect(getSearchSinceDate(new Date(now))).toBe(expected);
     });
   });
 });

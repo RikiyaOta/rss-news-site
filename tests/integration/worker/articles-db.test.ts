@@ -280,6 +280,59 @@ describe("D1 クエリレイヤー (src/server/db/articles) の結合テスト",
       expect(topFive.map((r) => r.id)).toEqual(expected);
     });
 
+    describe("検索対象の絞り込み", () => {
+      const vec = new Float32Array(1024);
+      vec[0] = 1.0;
+
+      beforeEach(async () => {
+        await env.DB.prepare("DELETE FROM articles").run();
+        await upsertArticles(env.DB, [
+          // JST 12:00 になるよう UTC 03:00 に置く
+          article({
+            id: "d19",
+            url: "https://example.com/w/19",
+            published_at: "2026-08-19T03:00:00.000Z",
+            embedding: vec,
+          }),
+          article({
+            id: "d20",
+            url: "https://example.com/w/20",
+            published_at: "2026-08-20T03:00:00.000Z",
+            embedding: vec,
+          }),
+          article({
+            id: "d21",
+            url: "https://example.com/w/21",
+            published_at: "2026-08-21T03:00:00.000Z",
+            embedding: vec,
+          }),
+        ]);
+      });
+
+      it.each([
+        ["2026-08-21", ["d21"], "開始日当日の記事は含む"],
+        ["2026-08-20", ["d20", "d21"], "開始日より前の記事は含まない"],
+        ["2026-08-19", ["d19", "d20", "d21"], "全記事が期間内"],
+        ["2026-08-22", [], "全記事が期間外"],
+      ])("sinceDate が %s のとき %j が対象になること (%s)", async (sinceDate, expected) => {
+        const results = await searchArticlesByVector(env.DB, queryVec, { sinceDate, limit: 10 });
+        expect(results.map((r) => r.id).sort()).toEqual(expected);
+      });
+
+      it.each([
+        [1, ["d21"]],
+        [2, ["d20", "d21"]],
+        [3, ["d19", "d20", "d21"]],
+        [4, ["d19", "d20", "d21"]],
+      ])(
+        "走査件数の上限が %s のとき、公開日の新しい順に %j だけが対象になること",
+        async (maxScan, expected) => {
+          const results = await searchArticlesByVector(env.DB, queryVec, { maxScan, limit: 10 });
+          expect(results.map((r) => r.id).sort()).toEqual(expected);
+        },
+      );
+    });
+
     it("D1 が BLOB をバイト配列で返し、deserializeVector が 1024 次元へ復元できること", async () => {
       const row = await env.DB.prepare("SELECT embedding FROM articles WHERE id = 'high'").first<{
         embedding: number[];

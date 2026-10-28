@@ -246,19 +246,34 @@ function isBetterCandidate(
 }
 
 /**
+ * 検索 1 回で走査する記事数の上限。
+ *
+ * 走査はベクトルを Worker 内で総当たりするため、件数に比例して CPU とメモリを使う。
+ * 約 5,000 件では動いていたが、約 7,400 件で Workers の上限を超えて 503 (Error 1102)
+ * になった。期間 (sinceDate) で絞っても、1 日の記事数が増えれば同じことが起きるため、
+ * 期間とは別に件数でも上限をかける。公開日の新しい記事から優先して走査する。
+ */
+export const SEARCH_MAX_SCAN = 4000;
+
+/**
  * クエリベクトルとのコサイン類似度が高い上位記事を検索・ソートして取得する。
  *
- * 全記事のベクトルを走査する必要がある一方で、返すのは上位 limit 件だけなので、
+ * 対象記事のベクトルを走査する必要がある一方で、返すのは上位 limit 件だけなので、
  * 走査中に保持するのは上位 limit 件のみとし、記事オブジェクトの生成も
  * 最終的に返す分だけに絞っている（全件を配列に積んでから sort しない）。
+ *
+ * 走査対象は sinceDate (JST) 以降に公開された記事のうち、新しい順に maxScan 件まで。
  */
 export async function searchArticlesByVector(
   db: D1DatabaseLike | any,
   queryVector: Float32Array,
-  options?: { limit?: number; minSimilarity?: number },
+  options?: { limit?: number; minSimilarity?: number; sinceDate?: string; maxScan?: number },
 ): Promise<(ArticleRecord & { similarity: number })[]> {
   const limit = options?.limit ?? 30;
   const minSimilarity = options?.minSimilarity ?? 0;
+  // 未指定なら期間では絞らない (どの YYYY-MM-DD よりも前の日付)
+  const sinceDate = options?.sinceDate ?? "0000-01-01";
+  const maxScan = options?.maxScan ?? SEARCH_MAX_SCAN;
 
   if (limit <= 0) return [];
 
@@ -266,10 +281,12 @@ export async function searchArticlesByVector(
   const query = `
     SELECT id, title, url, source_name, summary, score, published_at, published_date_jst, embedding
     FROM articles
-    WHERE embedding IS NOT NULL
+    WHERE embedding IS NOT NULL AND published_date_jst >= ?
+    ORDER BY published_date_jst DESC
+    LIMIT ?
   `.trim();
 
-  const stmt = db.prepare(query);
+  const stmt = db.prepare(query).bind(sinceDate, maxScan);
   const res = await stmt.all();
   const rows = (Array.isArray(res) ? res : (res.results ?? [])) as Array<
     ArticleRecord & { embedding: Uint8Array | ArrayBuffer }
