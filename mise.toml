@@ -7,3 +7,9 @@ pnpm = "12.7.0"
 terraform = "1.16.4"
 tflint = "0.64.0"
 "github:suzuki-shunsuke/pinact" = "v5.0.0"
+
+# `pnpm up --latest` は上げてはいけない依存まで上げるため、手動更新はこちらを使う。
+# 何を除外しているか・いつ除外を外せるかはスクリプト冒頭のコメントを参照。
+[tasks."deps:update"]
+description = "制約を守って pnpm の依存を最新にする"
+run = "bash scripts/update-deps.sh"

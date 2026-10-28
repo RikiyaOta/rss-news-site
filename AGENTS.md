@@ -18,6 +18,7 @@
 
 Renovate は `renovate.json` の `"enabled": false` で **停止しています**。依存更新はオーナーが気づいたときに手動で行います（Dependabot alerts は設定ファイル不要の別機能なので引き続き有効です）。設定内容は再開時のために残してあります。
 
+* **手動更新は `mise run deps:update`（`scripts/update-deps.sh`）で行ってください。** `pnpm up --latest` は下記の制約を無視して全依存を上げてしまいます。
 * **手動更新でも 7 日の待機は守られます。** `pnpm-workspace.yaml` の `minimumReleaseAge: 10080`（`minimumReleaseAgeStrict: true`）と `mise.toml` の `minimum_release_age = "7d"` により、リリースから 7 日未満のバージョンはインストールできません。
 * **`@huggingface/transformers` は 3.8.1 から上げないでください。** 理由は `src/pipeline/embedder.ts` の `getExtractor` のコメントを参照してください。
 * **vitest 本体と `@cloudflare/vitest-pool-workers` は同時に更新してください。** pool-workers は peerDependencies で vitest のメジャーを固定しており、片方だけ上げると L3 (Worker) が起動できません。
