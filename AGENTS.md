@@ -10,7 +10,7 @@
   * パッケージのインストール、ビルド、テスト、スクリプト実行には **必ず `pnpm` のみを使用** してください。
   * **`npm`、`npx`、`yarn`、`bun` 等のコマンドは絶対に使用禁止** です（例: `npm test` ではなく `pnpm test`、`npx vitest` ではなく `pnpm vitest`）。
 * **バージョンマネージャー (`mise`):**
-  * グローバルツール（Node.js 24 LTS, pnpm 11.22, Terraform 1.15.8, pinact 4.0.0）は `mise.toml` で管理されており、`mise.lock` でハッシュ固定されています。
+  * グローバルツール（Node.js, pnpm, Terraform, tflint, pinact）は `mise.toml` で管理されており、`mise.lock` でハッシュ固定されています。バージョンは `mise.toml` を正とし、ここには書きません。
 * **サプライチェーンセキュリティ:**
   * `pnpm-workspace.yaml` に `minimumReleaseAge: 10080`（7日間）が設定されています。最新リリースから7日未満のパッケージはインストールできません。
 
@@ -18,9 +18,10 @@
 
 Renovate は `renovate.json` の `"enabled": false` で **停止しています**。依存更新はオーナーが気づいたときに手動で行います（Dependabot alerts は設定ファイル不要の別機能なので引き続き有効です）。設定内容は再開時のために残してあります。
 
+* **手動更新は `mise run deps:update`（`scripts/update-deps.sh`）で行ってください。** `pnpm up --latest` は下記の制約を無視して全依存を上げてしまいます。
 * **手動更新でも 7 日の待機は守られます。** `pnpm-workspace.yaml` の `minimumReleaseAge: 10080`（`minimumReleaseAgeStrict: true`）と `mise.toml` の `minimum_release_age = "7d"` により、リリースから 7 日未満のバージョンはインストールできません。
 * **`@huggingface/transformers` は 3.8.1 から上げないでください。** 理由は `src/pipeline/embedder.ts` の `getExtractor` のコメントを参照してください。
-* **vitest 本体と `@cloudflare/vitest-pool-workers` は同時に更新してください。** pool-workers は peerDependencies で vitest のメジャーを固定しており、片方だけ上げると L3 (Worker) が起動できません。
+* **vitest のメジャーは `@cloudflare/vitest-plugin` の peerDependencies が対応してから上げてください。** プラグインは vitest の内部 API に依存しており、対応外の vitest と組み合わせると L3 (Worker) が起動できません。（旧名 `@cloudflare/vitest-pool-workers` は deprecated のため移行済みです。）
 * Renovate を再開するときは `"enabled": false` を外し、`pnpm dlx --package renovate renovate-config-validator` で検証してください（`renovate.json` があるディレクトリで引数なしで実行します）。
 
 ---

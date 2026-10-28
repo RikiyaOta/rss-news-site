@@ -29,9 +29,9 @@
       "groupName": "npm minor updates"
     },
     {
-      "description": "vitest 本体と @cloudflare/vitest-pool-workers は同じ PR で更新する。pool-workers は Vitest の内部 API に依存し、peerDependencies で対応する vitest のメジャーを固定している (0.22.0 は ^4.1.0 のみ)。vitest だけが先にメジャーを上げると workerd 上でテストワーカーが起動できず、L3 (Worker) が 1 件も実行されずに落ちる (vitest 5 の PR #78 で実際に発生)。pool-workers の更新は 0.x のマイナー、vitest はメジャーと更新種別が異なるため、separateMajorMinor: false で同じブランチに載せる。npm patch / minor のグループより後に置き、groupName を上書きする。メジャーが混ざりうるグループなので自動マージはしない。",
+      "description": "vitest 本体と @cloudflare/vitest-plugin (旧 @cloudflare/vitest-pool-workers) は同じ PR で更新する。プラグインは Vitest の内部 API に依存し、peerDependencies で対応する vitest のメジャーを宣言している。対応外の vitest と組み合わせると workerd 上でテストワーカーが起動できず、L3 (Worker) が 1 件も実行されずに落ちる (vitest 5 の PR #78 で実際に発生)。プラグインと vitest は更新種別が異なりうるため、separateMajorMinor: false で同じブランチに載せる。npm patch / minor のグループより後に置き、groupName を上書きする。メジャーが混ざりうるグループなので自動マージはしない。",
       "matchManagers": ["npm"],
-      "matchPackageNames": ["vitest", "@vitest/**", "@cloudflare/vitest-pool-workers"],
+      "matchPackageNames": ["vitest", "@vitest/**", "@cloudflare/vitest-plugin"],
       "groupName": "vitest",
       "separateMajorMinor": false,
       "automerge": false
