@@ -10,7 +10,7 @@
   * パッケージのインストール、ビルド、テスト、スクリプト実行には **必ず `pnpm` のみを使用** してください。
   * **`npm`、`npx`、`yarn`、`bun` 等のコマンドは絶対に使用禁止** です（例: `npm test` ではなく `pnpm test`、`npx vitest` ではなく `pnpm vitest`）。
 * **バージョンマネージャー (`mise`):**
-  * グローバルツール（Node.js 24 LTS, pnpm 11.22, Terraform 1.15.8, pinact 4.0.0）は `mise.toml` で管理されており、`mise.lock` でハッシュ固定されています。
+  * グローバルツール（Node.js, pnpm, Terraform, tflint, pinact）は `mise.toml` で管理されており、`mise.lock` でハッシュ固定されています。バージョンは `mise.toml` を正とし、ここには書きません。
 * **サプライチェーンセキュリティ:**
   * `pnpm-workspace.yaml` に `minimumReleaseAge: 10080`（7日間）が設定されています。最新リリースから7日未満のパッケージはインストールできません。
 
