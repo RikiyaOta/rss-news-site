@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getTodayJstDateString } from "../shared/date";
+import { getSearchSinceDate, getTodayJstDateString } from "../shared/date";
 import {
   getArticlesByPublishedDate,
   countArticlesByPublishedDate,
@@ -100,6 +100,7 @@ app.get("/api/search", async (c) => {
 
   const results = await searchArticlesByVector(c.env.DB, queryVector, {
     limit: isNaN(limit) ? 30 : limit,
+    sinceDate: getSearchSinceDate(),
   });
 
   return c.json({

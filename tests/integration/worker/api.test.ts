@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import app, { Bindings } from "../../../src/server/index";
 import { upsertArticles, ArticleInput } from "../../../src/server/db/articles";
+import { adjustDateString, getTodayJstDateString } from "../../../src/shared/date";
 
 /**
  * Hono API の結合テスト。
@@ -158,6 +159,11 @@ describe("Hono バックエンド API (src/server/index) の結合テスト", ()
   });
 
   describe("GET /api/search", () => {
+    /** 今日 (JST) から n 日前の正午 (JST) を表す published_at */
+    function daysAgo(n: number): string {
+      return `${adjustDateString(getTodayJstDateString(), -n)}T03:00:00.000Z`;
+    }
+
     beforeEach(async () => {
       const vecTs = new Float32Array(1024);
       vecTs[0] = 0.9;
@@ -174,7 +180,7 @@ describe("Hono バックエンド API (src/server/index) の結合テスト", ()
           source_name: "Tech News",
           summary: "TypeScript 5.x について",
           score: 85,
-          published_at: "2026-08-20T00:00:00.000Z",
+          published_at: daysAgo(0),
           embedding: vecTs,
         },
         {
@@ -184,7 +190,7 @@ describe("Hono バックエンド API (src/server/index) の結合テスト", ()
           source_name: "Tech News",
           summary: "Python による機械学習",
           score: 80,
-          published_at: "2026-08-20T00:00:00.000Z",
+          published_at: daysAgo(0),
           embedding: vecPy,
         },
       ]);
@@ -199,6 +205,27 @@ describe("Hono バックエンド API (src/server/index) の結合テスト", ()
       expect(data.query).toBe("TypeScript");
       expect(data.results.map((r: any) => r.id)).toEqual(["search-ts", "search-py"]);
       expect(data.results[0].similarity).toBeGreaterThan(0.9);
+    });
+
+    it("検索対象期間より前に公開された記事は結果に含めないこと", async () => {
+      const vecOld = new Float32Array(1024);
+      vecOld[0] = 1.0;
+      await upsertArticles(env.DB, [
+        {
+          id: "search-old",
+          title: "TypeScript の古い記事",
+          url: "https://example.com/old",
+          source_name: "Tech News",
+          summary: null,
+          score: 99,
+          published_at: daysAgo(60),
+          embedding: vecOld,
+        },
+      ]);
+
+      const res = await app.request("/api/search?q=TypeScript", {}, bindings());
+      const data = (await res.json()) as any;
+      expect(data.results.map((r: any) => r.id)).toEqual(["search-ts", "search-py"]);
     });
 
     it("検索クエリは前後の空白がトリムされてベクトル化されること", async () => {

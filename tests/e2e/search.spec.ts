@@ -53,10 +53,10 @@ test.describe("セマンティック検索", () => {
     ).toBeVisible();
   });
 
-  test("検索は日付をまたいで全期間を対象とすること", async ({ page }) => {
+  test("検索は当日に限らず、日付をまたいで直近の記事を対象とすること", async ({ page }) => {
     await search(page, "エッジコンピューティング オープンソース");
 
-    // 前日の記事が先頭に来る = 日別一覧と違い日付で絞られていない
+    // 前日の記事が先頭に来る = 日別一覧と違い当日だけに絞られていない
     await expect(
       searchResults(page).first().getByRole("heading", { name: YESTERDAY_ARTICLES[0].title }),
     ).toBeVisible();

@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { Search, X } from "lucide-react";
+import { SEARCH_WINDOW_DAYS } from "../../shared/date";
 
 export interface SearchBarProps {
   query: string;
@@ -61,6 +62,9 @@ export function SearchBar({
           <Search className="w-4 h-4" />
         </button>
       </div>
+      <p className="mt-2 px-2 text-xs text-zinc-500 dark:text-zinc-400">
+        直近{SEARCH_WINDOW_DAYS}日の記事から検索します
+      </p>
     </div>
   );
 }

@@ -24,6 +24,20 @@ describe("SearchBar コンポーネント", () => {
     expect(screen.getByRole("button", { name: /クリア/i })).toBeDefined();
   });
 
+  it("検索対象が直近 30 日の記事であることを表示すること", () => {
+    render(
+      <SearchBar
+        query=""
+        onQueryChange={() => {}}
+        onSearch={() => {}}
+        onClear={() => {}}
+        isLoading={false}
+      />,
+    );
+
+    expect(screen.getByText("直近30日の記事から検索します")).toBeDefined();
+  });
+
   it("プレースホルダーは例示を含まない短い文言であること", () => {
     render(
       <SearchBar

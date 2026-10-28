@@ -58,6 +58,20 @@ export function getTodayJstDateString(now: Date = new Date()): DateString {
 }
 
 /**
+ * キーワード検索の対象期間 (今日を含む日数)。
+ *
+ * 検索は対象記事のベクトルを Worker 内で総当たりするため、読み込む記事数に比例して
+ * CPU とメモリを使う。全期間を対象にすると記事の増加とともに Workers の上限を超え
+ * (Error 1102)、検索が 503 になる。直近の記事に絞ることで読み込み量を抑える。
+ */
+export const SEARCH_WINDOW_DAYS = 30;
+
+/** 検索対象期間の開始日 (JST)。今日を含めて SEARCH_WINDOW_DAYS 日分になる */
+export function getSearchSinceDate(now: Date = new Date()): DateString {
+  return adjustDateString(getTodayJstDateString(now), -(SEARCH_WINDOW_DAYS - 1));
+}
+
+/**
  * 日付文字列を指定日数ぶんずらす。
  *
  * ローカルタイムゾーンの影響を受けないよう UTC で計算する。
