@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# pnpm の依存を、このリポジトリの制約を守りながら最新に上げる。
+# mise のツールと pnpm の依存を、このリポジトリの制約を守りながら最新に上げる。
 # 使い方: mise run deps:update (mise.toml の [tasks] から呼ばれる)
 #
 # ============================================================================
@@ -8,12 +8,10 @@
 # ============================================================================
 #
 # `pnpm up --latest` は package.json のバージョン指定 (完全固定の "3.8.1" も含む)
-# をすべて無視して最新に上げる。このリポジトリには「一緒に上げてはいけない」
-# 「この範囲までしか上げられない」依存があり、素の `--latest` ではそれを破る。
+# をすべて無視して最新に上げる。このリポジトリには「上げてはいけない」
+# 「勝手にメジャーを上げてはいけない」依存があり、素の `--latest` ではそれを破る。
 # Renovate が動いていた頃は renovate.json の packageRules がこれを担っていたが、
 # Renovate を止めたので、同じ制約を手動更新用にここへ書き写している。
-#
-# 依存ごとの扱いは次の 3 つ。
 #
 # ----------------------------------------------------------------------------
 # (1) @huggingface/transformers … 3.8.1 から動かさない
@@ -45,40 +43,40 @@
 #      これが通れば解禁できる。
 #
 # 解禁するときに外すもの (どれかを残すと、また誰かが「上げるな」と判断する):
-#   - このスクリプトの EXCLUDES から @huggingface/transformers
+#   - このスクリプトの PINNED から @huggingface/transformers
 #   - renovate.json の @huggingface/transformers の packageRule
 #   - src/pipeline/embedder.ts の getExtractor のコメントの固定理由
 #   - AGENTS.md の「3.8.1 から上げないでください」の行
 #
 # ----------------------------------------------------------------------------
-# (2) vitest / @vitest/* / @cloudflare/vitest-pool-workers … pool-workers に合わせる
+# (2) vitest / @vitest/* … 今のメジャーの中でだけ上げる
 # ----------------------------------------------------------------------------
 # 何が起きるか:
-#   @cloudflare/vitest-pool-workers は、L3 (Worker) のテストを本番と同じ
-#   workerd 上で動かすための vitest プラグイン。vitest の内部 API に依存しているため、
-#   peerDependencies で「対応している vitest のメジャー」を固定している
-#   (例: 0.23.0 は vitest ^4.1.0 のみ)。vitest だけを新しいメジャーに上げると、
-#   workerd 上でテストワーカーが起動できず L3 (Worker) が 1 件も走らずに落ちる
-#   (vitest 5 の PR #78 で実際に起きた)。
+#   @cloudflare/vitest-plugin は、L3 (Worker) のテストを本番と同じ workerd 上で
+#   動かすための vitest プラグイン。vitest の内部 API に依存しているため、
+#   peerDependencies で「対応している vitest のメジャー」を宣言している。
+#   これを外れた vitest と組み合わせると、workerd 上でテストワーカーが起動できず
+#   L3 (Worker) が 1 件も走らずに落ちる (vitest 5 の PR #78 で実際に起きた)。
 #
-#   そこでこのスクリプトでは、先に pool-workers を最新にしてから、
-#   それが peerDependencies で宣言している範囲の中で vitest 系を最新にする。
-#   範囲は毎回 pool-workers 自身から読むので、ここに数字は書いていない。
+# このスクリプトでの扱い:
+#   vitest のメジャーを上げるのは破壊的変更の確認を伴う作業なので、自動ではやらない。
+#   vitest 系は今のメジャーの中で最新にし、プラグインは最新にする。
+#   両者が食い違っていないかは、最後の `pnpm peers check` で確かめる
+#   (プラグインが今の vitest のメジャーをサポートしなくなったら、そこで止まる)。
+#
+# vitest のメジャーを上げるとき (手作業):
+#   1. プラグインが新メジャーに対応しているか見る:
+#        pnpm view @cloudflare/vitest-plugin peerDependencies.vitest
+#   2. 対応していれば、vitest 系をまとめて上げる (例: 5 系):
+#        pnpm up vitest@^5 @vitest/coverage-v8@^5
+#   3. pnpm check で L3 (Worker) まで通ることを確かめる。
 #
 # この面倒が要らなくなる条件:
-#   「プラグインと vitest を揃える」こと自体は無くならない (プラグインが vitest
-#   内部に依存する限り続く)。ただし範囲はプラグインから毎回読むので、
-#   プラグインが新しい vitest に対応すれば、このスクリプトを流すだけでそこまで上がる。
-#
-#   注意: @cloudflare/vitest-pool-workers は deprecated になり、
-#   @cloudflare/vitest-plugin に改名された (旧名は今後更新されない)。
-#   旧名のままだと vitest は 4 系で止まり続ける。新名は vitest 5 にも対応している
-#   (`pnpm view @cloudflare/vitest-plugin peerDependencies`)。
-#   vitest.worker.config.ts などを新パッケージへ移行したら、
-#   下の POOL_WORKERS を新しい名前に変えること。
+#   無くならない (プラグインが vitest 内部に依存する限り続く)。
+#   ただし食い違いは peers check が機械的に検出するので、覚えておく必要はない。
 #
 # ----------------------------------------------------------------------------
-# (3) @types/node … mise で使っている Node.js のメジャーに合わせる
+# (3) @types/node … Node.js のメジャーに合わせる
 # ----------------------------------------------------------------------------
 # 何が起きるか:
 #   @types/node は「Node.js の API の型定義」で、Node.js 本体とは別に版が進む。
@@ -86,16 +84,15 @@
 #   実際には存在しない API を使ってもコンパイルが通ってしまう。
 #
 # この面倒が要らなくなる条件:
-#   無くならないが、手作業も不要。メジャーは mise.toml の node から読むので、
-#   mise.toml の node を上げれば、次にこのスクリプトを流したときに追随する。
+#   無くならないが、手作業も不要。先に mise で node を上げてから、
+#   その node のメジャーに合わせて上げる。
 #
 # ============================================================================
-# このスクリプト自体が要らなくなる条件
+# このスクリプトの pnpm 部分が要らなくなる条件
 # ============================================================================
 #   Renovate を再開すれば (renovate.json の "enabled": false を外す)、
-#   上の (1)〜(3) のうち (1)(2) は renovate.json の packageRules が担うので、
-#   このスクリプトは削除してよい。(3) は renovate.json に無いので、
-#   消すなら Renovate 側にも同じ規則を足すこと。
+#   (1)(2) は renovate.json の packageRules が担う。(3) は renovate.json に
+#   無いので、スクリプトを消すなら Renovate 側にも同じ規則を足すこと。
 #
 # 実行後に手元で確認すること:
 #   pnpm check && pnpm test:e2e
@@ -104,14 +101,15 @@
 
 set -euo pipefail
 
-# --- (1) 上げない依存 -------------------------------------------------------
+# mise up で node / pnpm 自体が新しくなるため、以降は mise exec を通して
+# 新しい版で実行する (タスク起動時の PATH は古い版を指したままになる)。
+pnpm() { mise exec -- pnpm "$@"; }
+node() { mise exec -- node "$@"; }
+
 PINNED=(
   "@huggingface/transformers"
 )
-
-# --- (2) pool-workers に合わせる依存 ----------------------------------------
-POOL_WORKERS="@cloudflare/vitest-pool-workers"
-# package.json に実際に載っている vitest / @vitest/* を拾う (後から増えても追随する)
+# package.json に載っている vitest / @vitest/* を拾う (後から増えても追随する)
 mapfile -t VITEST_PKGS < <(node -p '
   const p = require("./package.json");
   Object.keys({ ...p.dependencies, ...p.devDependencies })
@@ -119,45 +117,35 @@ mapfile -t VITEST_PKGS < <(node -p '
     .join("\n")
 ')
 
-# --- (3) Node.js のメジャーに合わせる依存 ------------------------------------
-# 実行中の node ではなく mise.toml から読む (mise を通さずに実行しても正しくなるように)
-NODE_MAJOR="$(sed -n 's/^node = "\([0-9]*\)\..*/\1/p' mise.toml)"
-if [[ -z "$NODE_MAJOR" ]]; then
-  echo "ERROR: mise.toml から node のバージョンを読めませんでした。" >&2
-  exit 1
-fi
+echo "==> mise のツールを最新に上げます"
+mise up --bump
 
 pinned_before="$(node -p 'require("./package.json").dependencies["@huggingface/transformers"]')"
 
-echo "==> 制約の無い依存を最新に上げます"
+echo "==> 制約の無い pnpm の依存を最新に上げます"
 EXCLUDES=()
-for name in "${PINNED[@]}" "$POOL_WORKERS" "${VITEST_PKGS[@]}" "@types/node"; do
+for name in "${PINNED[@]}" "${VITEST_PKGS[@]}" "@types/node"; do
   EXCLUDES+=("!${name}")
 done
 pnpm up --latest "${EXCLUDES[@]}"
 
-echo "==> ${POOL_WORKERS} を最新に上げます"
-pnpm up --latest "$POOL_WORKERS"
+echo "==> vitest 系を今のメジャーの中で最新に上げます"
+pnpm up "${VITEST_PKGS[@]}"
 
-# `pnpm view ...@latest` ではなく、実際に入った版の package.json から読む。
-# minimumReleaseAge (7 日) により、latest タグより古い版が入ることがあるため。
-VITEST_RANGE="$(node -p "require('./node_modules/${POOL_WORKERS}/package.json').peerDependencies.vitest")"
-
-echo "==> vitest 系を ${POOL_WORKERS} の対応範囲 (${VITEST_RANGE}) 内で最新に上げます"
-VITEST_SPECS=()
-for name in "${VITEST_PKGS[@]}"; do
-  VITEST_SPECS+=("${name}@${VITEST_RANGE}")
-done
-pnpm up "${VITEST_SPECS[@]}"
-
+NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
 echo "==> @types/node を Node.js ${NODE_MAJOR} 系の最新に上げます"
 pnpm up "@types/node@^${NODE_MAJOR}"
 
-# 念のため、固定した依存が本当に動いていないかを確かめる
 pinned_after="$(node -p 'require("./package.json").dependencies["@huggingface/transformers"]')"
 if [[ "$pinned_before" != "$pinned_after" ]]; then
   echo "ERROR: @huggingface/transformers が ${pinned_before} から ${pinned_after} に変わりました。" >&2
   echo "       このスクリプト冒頭のコメント (1) を参照してください。" >&2
+  exit 1
+fi
+
+if ! pnpm peers check; then
+  echo "ERROR: peerDependencies の食い違いがあります。" >&2
+  echo "       vitest とプラグインの組み合わせなら、冒頭のコメント (2) を参照してください。" >&2
   exit 1
 fi
 
