@@ -75,24 +75,11 @@
 #   無くならない (プラグインが vitest 内部に依存する限り続く)。
 #   ただし食い違いは peers check が機械的に検出するので、覚えておく必要はない。
 #
-# ----------------------------------------------------------------------------
-# (3) @types/node … Node.js のメジャーに合わせる
-# ----------------------------------------------------------------------------
-# 何が起きるか:
-#   @types/node は「Node.js の API の型定義」で、Node.js 本体とは別に版が進む。
-#   `--latest` だと実行環境 (mise.toml の node) より新しい Node の型になり、
-#   実際には存在しない API を使ってもコンパイルが通ってしまう。
-#
-# この面倒が要らなくなる条件:
-#   無くならないが、手作業も不要。先に mise で node を上げてから、
-#   その node のメジャーに合わせて上げる。
-#
 # ============================================================================
 # このスクリプトの pnpm 部分が要らなくなる条件
 # ============================================================================
 #   Renovate を再開すれば (renovate.json の "enabled": false を外す)、
-#   (1)(2) は renovate.json の packageRules が担う。(3) は renovate.json に
-#   無いので、スクリプトを消すなら Renovate 側にも同じ規則を足すこと。
+#   (1)(2) は renovate.json の packageRules が担う。
 #
 # 実行後に手元で確認すること:
 #   pnpm check && pnpm test:e2e
@@ -124,17 +111,13 @@ pinned_before="$(node -p 'require("./package.json").dependencies["@huggingface/t
 
 echo "==> 制約の無い pnpm の依存を最新に上げます"
 EXCLUDES=()
-for name in "${PINNED[@]}" "${VITEST_PKGS[@]}" "@types/node"; do
+for name in "${PINNED[@]}" "${VITEST_PKGS[@]}"; do
   EXCLUDES+=("!${name}")
 done
 pnpm up --latest "${EXCLUDES[@]}"
 
 echo "==> vitest 系を今のメジャーの中で最新に上げます"
 pnpm up "${VITEST_PKGS[@]}"
-
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-echo "==> @types/node を Node.js ${NODE_MAJOR} 系の最新に上げます"
-pnpm up "@types/node@^${NODE_MAJOR}"
 
 pinned_after="$(node -p 'require("./package.json").dependencies["@huggingface/transformers"]')"
 if [[ "$pinned_before" != "$pinned_after" ]]; then
